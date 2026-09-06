@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fendyx - Super App</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Fondo animado de partículas -->
+    <div class="bg-animation">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <!-- Contenedor principal -->
+    <div class="auth-container">
+        <!-- Logo de Fendyx -->
+        <div class="logo-section">
+            <div class="logo-placeholder" id="appLogo">
+                <span class="logo-icon">⬡</span>
+                <h1 class="logo-text">FENDYX</h1>
+            </div>
+            <p class="tagline">Tu Super-App del Futuro</p>
+        </div>
+
+        <!-- Tarjeta de autenticación -->
+        <div class="auth-card">
+            <!-- Tabs Login/Registro -->
+            <div class="auth-tabs">
+                <button class="tab-btn active" id="loginTab" onclick="switchTab('login')">Iniciar Sesión</button>
+                <button class="tab-btn" id="registerTab" onclick="switchTab('register')">Crear Cuenta</button>
+            </div>
+
+            <!-- FORMULARIO DE LOGIN -->
+            <form id="loginForm" class="auth-form active">
+                <div class="form-group">
+                    <label for="loginEmail">Correo Electrónico</label>
+                    <input type="email" id="loginEmail" placeholder="tu@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Contraseña</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="loginPassword" placeholder="••••••••" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword('loginPassword', this)" aria-label="Mostrar contraseña">
+                            <svg class="eye-icon eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="eye-icon eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary">
+                    <span class="btn-text">Entrar a Fendyx</span>
+                    <span class="btn-loader hidden"></span>
+                </button>
+                <div class="form-footer">
+                    <a href="#" onclick="resetPassword()">¿Olvidaste tu contraseña?</a>
+                </div>
+            </form>
+
+            <!-- FORMULARIO DE REGISTRO -->
+            <form id="registerForm" class="auth-form">
+                <div class="form-group">
+                    <label for="regName">Nombre Completo</label>
+                    <input type="text" id="regName" placeholder="Tu nombre completo" required>
+                </div>
+                <div class="form-group">
+                    <label for="regEmail">Correo Electrónico</label>
+                    <input type="email" id="regEmail" placeholder="tu@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="regAge">Edad (Solo mayores de 18)</label>
+                    <input type="number" id="regAge" placeholder="18" min="18" max="120" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Contraseña</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="regPassword" placeholder="Mínimo 6 caracteres" minlength="6" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword('regPassword', this)" aria-label="Mostrar contraseña">
+                            <svg class="eye-icon eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="eye-icon eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="regRole">¿Qué tipo de cuenta necesitas?</label>
+                    <select id="regRole" required onchange="updateRoleFields()">
+                        <option value="">Selecciona tu rol...</option>
+                        <option value="user">👤 Usuario Estándar</option>
+                        <option value="restaurant">🍽️ Restaurante</option>
+                        <option value="delivery">🛵 Domiciliario</option>
+                        <option value="nightclub">🎵 Discoteca</option>
+                        <option value="remote_worker">💻 Trabajador Remoto</option>
+                    </select>
+                </div>
+
+                <!-- Campos dinámicos según rol -->
+                <div id="dynamicFields" class="dynamic-fields"></div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="regTerms" required>
+                    <label for="regTerms">Acepto los Términos y Condiciones de Fendyx</label>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    <span class="btn-text">Crear Cuenta</span>
+                    <span class="btn-loader hidden"></span>
+                </button>
+            </form>
+
+            <!-- Mensajes de error/éxito -->
+            <div id="authMessage" class="auth-message hidden"></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="auth-footer">
+            <p>🔒 Protegido por Supabase | Fendyx © 2026</p>
+        </div>
+    </div>
+
+    <!-- Script de la aplicación -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>
