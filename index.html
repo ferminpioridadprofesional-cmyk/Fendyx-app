@@ -400,7 +400,91 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
+<!-- ===== FENDYX v4 PRO: MÓDULOS PROFUNDOS ===== -->
+<section id="section-delivery" class="app-section section-pad">
+  <div class="section-header"><h2>🛵 Zona Domiciliario</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+  <div id="driverCard" class="driver-card"></div>
+  <div class="avail-card" id="availCard">
+    <div class="avail-dot" id="availDot"></div>
+    <div class="avail-info"><b id="availText">🔴 NO DISPONIBLE</b><small id="offersCount">0 entregas cerca de ti</small></div>
+    <button class="btn-switch" id="btnToggleAvail" onclick="toggleAvailability()">Conectarme</button>
+  </div>
+  <h3 class="sub-title">🎁 Nuevas entregas</h3>
+  <div id="offersList" class="list-compact"></div>
+  <div id="activeDeliveryCard" class="owner-panel hidden">
+    <h3>📦 Entrega activa</h3>
+    <div id="deliverySteps" class="steps"></div>
+    <div class="owner-form">
+      <input type="file" id="proofPhoto" accept="image/*">
+      <input type="text" id="codeInput" placeholder="🔐 Código de entrega (4 dígitos)" maxlength="4" inputmode="numeric">
+      <button class="btn-primary" onclick="confirmDelivery()">✅ Confirmar entrega</button>
+    </div>
+  </div>
+  <h3 class="sub-title">💰 Mis ganancias</h3>
+  <div class="stats-grid">
+    <div class="stat-card"><span id="earnToday">0</span><small>Hoy</small></div>
+    <div class="stat-card"><span id="earnCount">0</span><small>Entregas hoy</small></div>
+    <div class="stat-card"><span id="earnTips">0</span><small>Propinas</small></div>
+    <div class="stat-card"><span id="earnWeek">0</span><small>Semana</small></div>
+  </div>
+  <div class="owner-panel">
+    <h3>🏦 Retiros</h3>
+    <p class="dim">Saldo disponible: <b id="earnBalance">0</b> tokens</p>
+    <div class="admin-token-form">
+      <input type="number" id="withdrawAmount" placeholder="Monto a retirar" min="1">
+      <select id="withdrawMethod">
+        <option value="pago_movil">📱 Pago Móvil</option>
+        <option value="binance">🪙 Binance Pay</option>
+        <option value="zelle">💵 Zelle</option>
+        <option value="banco">🏦 Transferencia bancaria</option>
+      </select>
+      <button class="btn-primary" onclick="requestWithdrawal()">Solicitar retiro</button>
+    </div>
+    <div id="withdrawalsList" class="list-compact"></div>
+  </div>
+  <h3 class="sub-title">⭐ Mi reputación</h3>
+  <div class="rep-card">
+    <span class="rep-stars" id="repStars">★★★★★</span>
+    <span class="rep-level" id="repLevel">🥉 Nuevo</span>
+    <div id="repBreakdown" class="chips-row"></div>
+  </div>
+</section>
 
+<section id="section-profileedit" class="app-section section-pad">
+  <div class="section-header"><h2>✏️ Perfil Pro</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+  <form class="owner-panel owner-form" onsubmit="saveProfilePro(event)">
+    <input type="text" id="proName" placeholder="Nombre completo">
+    <textarea id="proBio" placeholder="Bio: cuéntale al mundo quién eres"></textarea>
+    <input type="text" id="proInterests" placeholder="Intereses (coma): música, cine, gym, viajes">
+    <label class="dim">Foto de perfil</label>
+    <input type="file" id="proAvatar" accept="image/*">
+    <label class="dim">Galería (puedes elegir varias fotos)</label>
+    <input type="file" id="proGallery" accept="image/*" multiple>
+    <button type="submit" class="btn-primary">Guardar perfil</button>
+  </form>
+</section>
+
+<div id="modal-userprofile" class="modal hidden">
+  <div class="modal-content wide">
+    <div class="modal-head"><h3 id="upName">Usuario</h3><button class="modal-close" onclick="closeModal('modal-userprofile')">✕</button></div>
+    <div class="up-hero">
+      <img id="upAvatar" alt="" class="up-avatar hidden">
+      <div class="up-avatar-letter" id="upAvatarLetter">U</div>
+      <div class="up-badges"><span class="role-badge" id="upRole">user</span><span id="upVerified"></span></div>
+      <div class="rep-stars" id="upRating">★★★★★</div>
+    </div>
+    <p id="upBio" class="dim"></p>
+    <h4 class="sub-title">🎯 Intereses</h4>
+    <div id="upInterests" class="chips-row"></div>
+    <h4 class="sub-title">📸 Galería</h4>
+    <div id="upGallery" class="gallery-grid"></div>
+    <button class="btn-primary" onclick="messageFromProfile()">💬 Enviar mensaje</button>
+  </div>
+</div>
+
+<div id="proximityBanner" class="proximity-banner hidden" onclick="this.classList.add('hidden')">
+  🔥 <b id="proximityText"></b>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://meet.jit.si/external_api.js"></script>
