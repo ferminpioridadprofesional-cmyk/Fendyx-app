@@ -1,5 +1,5 @@
 // =====================================================
-// FENDYX - LÓGICA COMPLETA v3 (SPA TOTAL)
+// FENDYX v4 PRO - LÓGICA COMPLETA PROFESIONAL
 // =====================================================
 const SUPABASE_URL = 'https://jsrarddyrjmuinwlyten.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzcmFyZGR5cmptdWlud2x5dGVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MjIxNDQsImV4cCI6MjEwNDI5ODE0NH0.4BBl7Cu0mJFL014dbWGN49AYJVZLxeYbWnegn9-S41M';
@@ -11,7 +11,7 @@ let cart = { restId: null, restName: '', items: [] };
 let currentConvId = null, viewedUserId = null, convCache = [];
 let jitsiApi = null, callInterval = null, callSeconds = 0, callCostTotal = 0, currentCallId = null, iAmClient = false, currentCallRate = 0;
 let clubLat = null, clubLng = null, currentClubId = null, radarInterval = null;
-let liveChannel = null;
+let liveChannel = null, proxInterval = null, notifiedProx = new Set(), rejectedOffers = new Set();
 
 const ROLE_LABELS = { user:'Usuario', restaurant:'Restaurante', delivery:'Domiciliario', nightclub:'Discoteca', remote_worker:'Trabajador Remoto', admin:'Administrador' };
 const STATUS_LABELS = { single:'Soltero/a', married:'Casado/a', looking:'Buscando conocer', unavailable:'No disponible' };
@@ -50,7 +50,7 @@ async function loadBranding() {
     if (data.logo_url) { img.src = data.logo_url; img.style.display = 'inline-block'; fall.style.display = 'none'; }
     else { img.style.display = 'none'; fall.style.display = 'block'; }
   };
-  setLogo('authLogo', 'authLogoFallback'); setLogo('headerLogo', 'headerLogoFallback'); setLogo('adminLogoPreview', 'adminLogoFallback');
+  setLogo('authLogo','authLogoFallback'); setLogo('headerLogo','headerLogoFallback'); setLogo('adminLogoPreview','adminLogoFallback');
   const name = data.app_name || 'FENDYX';
   ['authAppName','headerAppName'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = name; });
   const an = document.getElementById('adminAppName'); if (an && !an.value) an.value = name;
@@ -98,13 +98,13 @@ async function handleRegister(e) {
   const role = document.getElementById('regRole').value;
   if (age < 18) { showAuthMessage('Debes ser mayor de 18 años', 'error'); return; }
   const meta = {
-    full_name: document.getElementById('regName').value.trim(),
-    age: age, role: role,
+    full_name: document.getElementById('regName').value.trim(), age, role,
     rif: document.getElementById('regRIF')?.value || '',
     business_name: document.getElementById('regBusinessName')?.value || '',
     address: document.getElementById('regAddress')?.value || '',
     license: document.getElementById('regLicense')?.value || '',
     plate: document.getElementById('regPlate')?.value || '',
+    vehicle: document.getElementById('regVehicle')?.value || '',
     club_name: document.getElementById('regClubName')?.value || '',
     club_address: document.getElementById('regClubAddress')?.value || '',
     specialty: document.getElementById('regSpecialty')?.value || '',
@@ -116,12 +116,9 @@ async function handleRegister(e) {
     options: { data: meta }
   });
   if (error) { showAuthMessage('❌ ' + error.message, 'error'); return; }
-  if (data.session) {
-    currentUser = data.user;
-    localStorage.setItem('fendyx_pending_meta', JSON.stringify(meta));
-    await enterApp();
-  } else {
-    localStorage.setItem('fendyx_pending_meta', JSON.stringify(meta));
+  localStorage.setItem('fendyx_pending_meta', JSON.stringify(meta));
+  if (data.session) { currentUser = data.user; await enterApp(); }
+  else {
     showAuthMessage('✅ Cuenta creada. Revisa tu correo e inicia sesión.', 'success');
     setTimeout(() => switchAuthTab('login'), 2200);
   }
@@ -135,6 +132,7 @@ async function resetPassword() {
 async function handleLogout() {
   if (watchId) navigator.geolocation.clearWatch(watchId);
   if (radarInterval) clearInterval(radarInterval);
+  if (proxInterval) clearInterval(proxInterval);
   if (liveChannel) db.removeChannel(liveChannel);
   await db.auth.signOut();
   location.reload();
@@ -143,14 +141,12 @@ async function ensureRoleDetails() {
   const { data } = await db.from('role_details').select('*').eq('user_id', currentUser.id).single();
   if (data) { roleDetails = data; return; }
   const meta = JSON.parse(localStorage.getItem('fendyx_pending_meta') || 'null') || {};
-  const payload = {
+  const { data: created } = await db.from('role_details').insert({
     user_id: currentUser.id, role_type: currentProfile.role,
     rif: meta.rif || null, business_name: meta.business_name || null, address: meta.address || null,
-    license_number: meta.license || null, vehicle_plate: meta.plate || null,
-    specialty: meta.specialty || null,
-    rate_per_minute: meta.rate ? parseFloat(meta.rate) : null
-  };
-  const { data: created } = await db.from('role_details').insert(payload).select().single();
+    license_number: meta.license || null, vehicle_plate: meta.plate || null, vehicle_type: meta.vehicle || null,
+    specialty: meta.specialty || null, rate_per_minute: meta.rate ? parseFloat(meta.rate) : null
+  }).select().single();
   roleDetails = created;
   localStorage.removeItem('fendyx_pending_meta');
 }
@@ -173,8 +169,10 @@ function loadModules() {
     { id:'map', icon:'📍', n:'Mapa Social' }, { id:'radar', icon:'🌙', n:'Radar Nocturno' },
     { id:'restaurants', icon:'🍽️', n:'Restaurantes' }, { id:'orders', icon:'📦', n:'Pedidos' },
     { id:'remote', icon:'💼', n:'Trabajo Remoto' }, { id:'marketplace', icon:'🛒', n:'Marketplace' },
-    { id:'chat', icon:'💬', n:'Chat' }, { id:'tokens', icon:'◈', n:'Tokens' }, { id:'profile', icon:'👤', n:'Mi Perfil' }
+    { id:'chat', icon:'💬', n:'Chat' }, { id:'tokens', icon:'◈', n:'Tokens' },
+    { id:'profile', icon:'👤', n:'Mi Perfil' }, { id:'profileedit', icon:'✏️', n:'Perfil Pro' }
   ];
+  if (currentProfile.role === 'delivery') mods.splice(4, 0, { id:'delivery', icon:'🛵', n:'Zona Domiciliario' });
   if (currentProfile.role === 'admin') mods.unshift({ id:'admin', icon:'🛡️', n:'Panel Admin' });
   document.getElementById('modulesGrid').innerHTML = mods.map(m =>
     `<div class="module-card" onclick="showSection('${m.id}')"><span class="icon">${m.icon}</span><h3>${m.n}</h3></div>`).join('');
@@ -186,26 +184,43 @@ function showSection(name) {
   const navMap = { dashboard:0, map:1, radar:2, chat:3, tokens:4 };
   document.querySelectorAll('.bottom-nav .nav-item').forEach((n, i) => n.classList.toggle('active', i === navMap[name]));
   const loaders = {
-    map: () => { initMap(); loadMapUsers(); },
+    map: () => { initMap(); autoLocate(); loadMapUsers(); },
     radar: loadRadar, restaurants: loadRestaurants, orders: loadOrders,
     remote: loadWorkers, marketplace: loadMarketplace, chat: loadConversations,
-    tokens: loadTransactions, profile: loadProfileSection, admin: loadAdmin
+    tokens: loadTransactions, profile: loadProfileSection, admin: loadAdmin,
+    delivery: loadDeliveryHub, profileedit: fillProfilePro
   };
   loaders[name]?.();
 }
 
-// ===== MAPA SOCIAL =====
+// ===== UTILIDADES GEO =====
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000, toR = x => x * Math.PI / 180;
+  const dLat = toR(lat2 - lat1), dLon = toR(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function fmtDist(m) { return m < 1000 ? Math.round(m) + ' m' : (m/1000).toFixed(1) + ' km'; }
+function stars(r) { const n = Math.round(parseFloat(r) || 0); return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5-n); }
+function driverLevel(n) { return n >= 150 ? '💎 Élite' : n >= 50 ? '🥇 Experto' : n >= 10 ? '🥈 Confiable' : '🥉 Nuevo'; }
+
+// ===== MAPA SOCIAL PRO =====
 function initMap() {
   if (map) return;
-  map = L.map('mapBox', { zoomControl: true }).setView([10.4806, -66.9036], 13);
+  map = L.map('mapBox', { zoomControl: true }).setView([10.4806, -66.9036], 12);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO' }).addTo(map);
   setTimeout(() => map.invalidateSize(), 300);
+}
+function autoLocate() {
+  if (sharing || !navigator.geolocation) return;
+  toggleShareLocation();
 }
 function toggleShareLocation() {
   if (sharing) {
     sharing = false;
     if (watchId) navigator.geolocation.clearWatch(watchId);
-    db.from('user_locations').update({ is_sharing: false }).eq('user_id', currentUser.id).then(() => {});
+    if (proxInterval) clearInterval(proxInterval);
+    db.from('user_locations').update({ is_sharing: false }).eq('user_id', currentUser.id);
     document.getElementById('btnShareLocation').textContent = '📡 Compartir mi ubicación';
     showToast('📴 Dejaste de compartir ubicación');
     return;
@@ -215,34 +230,99 @@ function toggleShareLocation() {
     sharing = true;
     myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     await db.from('user_locations').upsert({ user_id: currentUser.id, latitude: myLocation.lat, longitude: myLocation.lng, is_sharing: true }, { onConflict: 'user_id' });
-    document.getElementById('btnShareLocation').textContent = '🔴 Compartiendo ubicación (tocar para parar)';
-    if (map) map.setView([myLocation.lat, myLocation.lng], 15);
+    document.getElementById('btnShareLocation').textContent = '🔴 EN VIVO (tocar para parar)';
+    if (map) map.setView([myLocation.lat, myLocation.lng], 14);
     loadMapUsers();
-  }, err => showToast('❌ Permiso de ubicación denegado'), { enableHighAccuracy: true });
-  showToast('📡 Compartiendo ubicación en vivo');
+    if (!proxInterval) proxInterval = setInterval(loadMapUsers, 15000);
+  }, () => showToast('❌ Permiso de ubicación denegado'), { enableHighAccuracy: true });
+  showToast('📡 Ubicándote en el mapa…');
 }
 async function loadMapUsers() {
   if (!map) return;
-  const { data } = await db.from('user_locations').select('*, profiles(id, full_name, role, avatar_url)').eq('is_sharing', true);
+  const { data } = await db.from('user_locations').select('*, profiles(id, full_name, role, avatar_url, rating)').eq('is_sharing', true);
   mapMarkers.forEach(m => map.removeMarker(m)); mapMarkers = [];
-  const list = document.getElementById('nearbyList');
-  const rows = (data || []).filter(r => r.profiles);
-  list.innerHTML = rows.length ? rows.map(r => {
-    const d = myLocation ? Math.round(haversine(myLocation.lat, myLocation.lng, r.latitude, r.longitude)) + ' m' : '📍';
-    return `<span class="chip" onclick="viewUserProfile('${r.profiles.id}')">🟢 ${r.profiles.full_name} · ${d}</span>`;
-  }).join('') : '<p class="empty-state">Nadie comparte ubicación ahora</p>';
-  rows.forEach(r => {
-    const m = L.circleMarker([r.latitude, r.longitude], { radius: 9, color: '#00d9ff', fillColor: '#00d9ff', fillOpacity: 0.55 })
+  const rows = (data || []).filter(r => r.profiles && r.user_id !== currentUser.id);
+  let visible = [];
+  if (myLocation) {
+    visible = rows.map(r => ({ ...r, dist: haversine(myLocation.lat, myLocation.lng, r.latitude, r.longitude) }))
+      .filter(r => r.dist <= 100000).sort((a, b) => a.dist - b.dist);
+    visible.forEach(r => { if (r.dist <= 20 && !notifiedProx.has(r.user_id)) fireProximity(r); });
+  } else visible = rows.map(r => ({ ...r, dist: null }));
+  document.getElementById('nearbyList').innerHTML = visible.length ? visible.map(r => {
+    const tag = r.dist === null ? '' : r.dist <= 20 ? '🔥 SUPER CERCA' : r.dist <= 15000 ? '📍 CERCA' : '🌎 REGIÓN';
+    return `<span class="chip ${r.dist !== null && r.dist <= 15000 ? 'active' : ''}" onclick="viewUserProfile('${r.profiles.id}')">${tag} ${r.profiles.full_name} · ${r.dist !== null ? fmtDist(r.dist) : ''}</span>`;
+  }).join('') : '<p class="empty-state">Nadie dentro de tu región (100 km) por ahora</p>';
+  visible.forEach(r => {
+    const color = r.dist !== null && r.dist <= 20 ? '#ff2d95' : r.dist !== null && r.dist <= 15000 ? '#00ff9d' : '#00d9ff';
+    const m = L.circleMarker([r.latitude, r.longitude], { radius: r.dist <= 20 ? 12 : 9, color, fillColor: color, fillOpacity: 0.55 })
       .addTo(map)
-      .bindPopup(`<div class="map-pop"><b>${r.profiles.full_name}</b><br>${ROLE_LABELS[r.profiles.role] || ''}<div class="pop-btns"><button class="btn-small" onclick="viewUserProfile('${r.profiles.id}')">Ver perfil</button><button class="btn-small success" onclick="startChatWith('${r.profiles.id}')">Mensaje</button></div></div>`);
+      .bindPopup(`<div class="map-pop"><b>${r.profiles.full_name}</b><br>${ROLE_LABELS[r.profiles.role] || ''} · ${stars(r.profiles.rating || 5)}<br>${r.dist !== null ? fmtDist(r.dist) + ' de ti' : ''}<div class="pop-btns"><button class="btn-small" onclick="viewUserProfile('${r.profiles.id}')">Ver perfil</button><button class="btn-small success" onclick="startChatWith('${r.profiles.id}')">Mensaje</button></div></div>`);
     mapMarkers.push(m);
   });
+  if (myLocation && !map._selfMark) {
+    map._selfMark = L.circleMarker([myLocation.lat, myLocation.lng], { radius: 8, color: '#fff', fillColor: '#a855f7', fillOpacity: 0.9 }).addTo(map).bindPopup('📍 Tú');
+  } else if (myLocation && map._selfMark) map._selfMark.setLatLng([myLocation.lat, myLocation.lng]);
 }
-function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371000, toR = x => x * Math.PI / 180;
-  const dLat = toR(lat2 - lat1), dLon = toR(lon2 - lon1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+function fireProximity(r) {
+  notifiedProx.add(r.user_id);
+  navigator.vibrate?.([250, 120, 250]);
+  const banner = document.getElementById('proximityBanner');
+  document.getElementById('proximityText').textContent = `¡SUPER CERCA! ${r.profiles.full_name} está a ${Math.round(r.dist)} m de ti. Toca para ver su perfil`;
+  banner.classList.remove('hidden');
+  banner.onclick = () => { banner.classList.add('hidden'); viewUserProfile(r.profiles.id); };
+  setTimeout(() => banner.classList.add('hidden'), 8000);
+  showToast('🔥 ' + r.profiles.full_name + ' está a ' + Math.round(r.dist) + ' m');
+}
+
+// ===== PERFILES PRO =====
+async function viewUserProfile(userId) {
+  const { data } = await db.from('profiles').select('*, role_details(*)').eq('id', userId).single();
+  if (!data) return;
+  viewedUserId = userId;
+  document.getElementById('upName').textContent = data.full_name || 'Usuario';
+  const img = document.getElementById('upAvatar'), letter = document.getElementById('upAvatarLetter');
+  if (data.avatar_url) { img.src = data.avatar_url; img.classList.remove('hidden'); letter.classList.add('hidden'); }
+  else { img.classList.add('hidden'); letter.classList.remove('hidden'); letter.textContent = (data.full_name || 'U').charAt(0).toUpperCase(); }
+  document.getElementById('upRole').textContent = ROLE_LABELS[data.role] || data.role;
+  document.getElementById('upVerified').textContent = data.is_verified ? ' ✅ Verificado' : '';
+  document.getElementById('upRating').textContent = stars(data.rating || 5) + ' ' + parseFloat(data.rating || 5).toFixed(1);
+  document.getElementById('upBio').textContent = data.bio || data.role_details?.[0]?.bio || 'Sin descripción aún.';
+  document.getElementById('upInterests').innerHTML = (data.interests || []).map(i => `<span class="chip">🎯 ${i}</span>`).join('') || '<p class="dim">Sin intereses publicados</p>';
+  document.getElementById('upGallery').innerHTML = (data.gallery_urls || []).map(u => `<img src="${u}" onclick="window.open('${u}')">`).join('') || '<p class="dim">Galería vacía</p>';
+  openModal('modal-userprofile');
+}
+function messageFromProfile() { if (viewedUserId) startChatWith(viewedUserId); }
+function fillProfilePro() {
+  document.getElementById('proName').value = currentProfile.full_name || '';
+  document.getElementById('proBio').value = currentProfile.bio || '';
+  document.getElementById('proInterests').value = (currentProfile.interests || []).join(', ');
+}
+async function saveProfilePro(e) {
+  e.preventDefault();
+  const updates = {
+    full_name: document.getElementById('proName').value || currentProfile.full_name,
+    bio: document.getElementById('proBio').value,
+    interests: document.getElementById('proInterests').value.split(',').map(s => s.trim()).filter(Boolean)
+  };
+  const av = document.getElementById('proAvatar').files[0];
+  if (av) {
+    const path = 'avatars/' + currentUser.id + '_' + Date.now() + '.png';
+    const { error } = await db.storage.from('fendyx-assets').upload(path, av);
+    if (!error) updates.avatar_url = db.storage.from('fendyx-assets').getPublicUrl(path).data.publicUrl;
+  }
+  const gal = Array.from(document.getElementById('proGallery').files || []);
+  if (gal.length) {
+    const urls = [];
+    for (const f of gal) {
+      const path = 'gallery/' + currentUser.id + '_' + Date.now() + '_' + f.name.replace(/[^a-zA-Z0-9.]/g, '_');
+      const { error } = await db.storage.from('fendyx-assets').upload(path, f);
+      if (!error) urls.push(db.storage.from('fendyx-assets').getPublicUrl(path).data.publicUrl);
+    }
+    updates.gallery_urls = [...(currentProfile.gallery_urls || []), ...urls];
+  }
+  await db.from('profiles').update(updates).eq('id', currentUser.id);
+  await loadProfile(); updateHeader();
+  showToast('✅ Perfil Pro actualizado');
 }
 
 // ===== RADAR NOCTURNO =====
@@ -250,60 +330,60 @@ async function loadRadar() {
   document.getElementById('nightclubOwnerPanel').classList.toggle('hidden', currentProfile.role !== 'nightclub');
   const { data: clubs } = await db.from('nightclubs').select('*').eq('is_active', true);
   const txt = document.getElementById('radarStatusText');
-  if (!clubs || !clubs.length) { txt.textContent = 'Aún no hay discotecas registradas en Fendyx'; currentClubId = null; document.getElementById('radarUsers').innerHTML = ''; return; }
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(async pos => {
-      myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      const inside = clubs.map(c => ({ c, d: haversine(myLocation.lat, myLocation.lng, c.latitude, c.longitude) }))
-        .filter(x => x.d <= (x.c.geofence_radius || 20)).sort((a, b) => a.d - b.d)[0];
-      if (inside) {
-        currentClubId = inside.c.id;
-        txt.innerHTML = `🎯 Estás dentro de <b>${inside.c.name}</b> (${Math.round(inside.d)} m del centro)`;
-        await db.from('radar_presences').upsert({ user_id: currentUser.id, nightclub_id: currentClubId, status: document.getElementById('radarStatusSelect').value }, { onConflict: 'user_id,nightclub_id' });
-        loadRadarUsers();
-        if (!radarInterval) radarInterval = setInterval(loadRadar, 30000);
-      } else {
-        currentClubId = null;
-        const near = clubs.map(c => ({ c, d: haversine(myLocation.lat, myLocation.lng, c.latitude, c.longitude) })).sort((a, b) => a.d - b.d)[0];
-        txt.textContent = `😴 Fuera de geocerca. La más cercana: ${near.c.name} a ${Math.round(near.d)} m`;
-        await db.from('radar_presences').delete().eq('user_id', currentUser.id);
-        document.getElementById('radarUsers').innerHTML = '<p class="empty-state">Entra a una discoteca para aparecer en el radar</p>';
-      }
-    }, () => { txt.textContent = '⚠️ Activa el GPS para usar el Radar Nocturno'; });
-  }
+  if (!clubs || !clubs.length) { txt.textContent = 'Aún no hay discotecas registradas'; currentClubId = null; document.getElementById('radarUsers').innerHTML = ''; return; }
+  if (!navigator.geolocation) { txt.textContent = '⚠️ GPS no disponible'; return; }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    const inside = clubs.map(c => ({ c, d: haversine(myLocation.lat, myLocation.lng, c.latitude, c.longitude) }))
+      .filter(x => x.d <= (x.c.geofence_radius || 20)).sort((a, b) => a.d - b.d)[0];
+    if (inside) {
+      currentClubId = inside.c.id;
+      txt.innerHTML = `🎯 Dentro de <b>${inside.c.name}</b> (${Math.round(inside.d)} m)`;
+      await db.from('radar_presences').upsert({ user_id: currentUser.id, nightclub_id: currentClubId, status: document.getElementById('radarStatusSelect').value }, { onConflict: 'user_id,nightclub_id' });
+      loadRadarUsers();
+      if (!radarInterval) radarInterval = setInterval(loadRadar, 30000);
+    } else {
+      currentClubId = null;
+      const near = clubs.map(c => ({ c, d: haversine(myLocation.lat, myLocation.lng, c.latitude, c.longitude) })).sort((a, b) => a.d - b.d)[0];
+      txt.textContent = `😴 Fuera de geocerca. Más cercana: ${near.c.name} a ${fmtDist(near.d)}`;
+      await db.from('radar_presences').delete().eq('user_id', currentUser.id);
+      document.getElementById('radarUsers').innerHTML = '<p class="empty-state">Entra a una discoteca para aparecer en el radar</p>';
+    }
+  }, () => { txt.textContent = '⚠️ Activa el GPS para el Radar'; });
 }
 async function loadRadarUsers() {
-  const { data } = await db.from('radar_presences').select('*, profiles(id, full_name, avatar_url)').eq('nightclub_id', currentClubId);
+  const { data } = await db.from('radar_presences').select('*, profiles(id, full_name, avatar_url, rating)').eq('nightclub_id', currentClubId);
   document.getElementById('radarUsers').innerHTML = (data || []).map(p =>
     `<div class="radar-user-card" onclick="viewUserProfile('${p.profiles.id}')">
       <div class="conv-avatar" style="margin:0 auto">${(p.profiles.full_name || 'U').charAt(0).toUpperCase()}</div>
       <h4>${p.profiles.full_name}</h4>
       <p><span class="status-dot status-${p.status}"></span>${STATUS_LABELS[p.status] || p.status}</p>
+      <p>${stars(p.profiles.rating || 5)}</p>
     </div>`).join('') || '<p class="empty-state">Eres el primero en el radar 🎉</p>';
 }
 async function updateRadarStatus() {
   if (!currentClubId) { showToast('Primero entra a la geocerca de una discoteca'); return; }
   await db.from('radar_presences').update({ status: document.getElementById('radarStatusSelect').value })
     .eq('user_id', currentUser.id).eq('nightclub_id', currentClubId);
-  showToast('✅ Estado actualizado: ' + STATUS_LABELS[document.getElementById('radarStatusSelect').value]);
+  showToast('✅ Estado: ' + STATUS_LABELS[document.getElementById('radarStatusSelect').value]);
   loadRadarUsers();
 }
 function setClubLocation() {
   navigator.geolocation.getCurrentPosition(pos => {
     clubLat = pos.coords.latitude; clubLng = pos.coords.longitude;
-    document.getElementById('clubCoords').textContent = `📍 Ubicado: ${clubLat.toFixed(6)}, ${clubLng.toFixed(6)}`;
+    document.getElementById('clubCoords').textContent = `📍 ${clubLat.toFixed(6)}, ${clubLng.toFixed(6)}`;
   }, () => showToast('❌ Permiso de GPS denegado'));
 }
 async function saveNightclub(e) {
   e.preventDefault();
-  if (clubLat === null) { showToast('Primero pulsa "Usar mi ubicación actual"'); return; }
+  if (clubLat === null) { showToast('Pulsa "Usar mi ubicación actual" primero'); return; }
   await db.from('nightclubs').upsert({
     owner_id: currentUser.id, name: document.getElementById('clubName').value,
     address: document.getElementById('clubAddress').value,
     latitude: clubLat, longitude: clubLng,
     geofence_radius: parseInt(document.getElementById('clubRadius').value) || 300
   }, { onConflict: 'owner_id' });
-  showToast('✅ Discoteca registrada con geocerca activa');
+  showToast('✅ Discoteca registrada con geocerca');
   loadRadar();
 }
 
@@ -320,7 +400,7 @@ async function loadRestaurants() {
       <div class="card-meta">📍 ${r.address || '—'}</div>
       <span class="status-pill ${r.is_open ? 'open' : 'closed'}">${r.is_open ? 'ABIERTO' : 'CERRADO'}</span><br>
       <button class="btn-small" onclick="viewMenu('${r.id}')">🍽️ Ver menú y pedir</button>
-    </div>`).join('') || '<p class="empty-state">Aún no hay restaurantes. ¡Registra el tuyo!</p>';
+    </div>`).join('') || '<p class="empty-state">Aún no hay restaurantes</p>';
 }
 async function loadOwnerRestaurant() {
   const { data } = await db.from('restaurants').select('*').eq('owner_id', currentUser.id).single();
@@ -334,11 +414,17 @@ async function loadOwnerRestaurant() {
 }
 async function saveRestaurant(e) {
   e.preventDefault();
+  let geo = {};
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      db.from('restaurants').update({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }).eq('owner_id', currentUser.id);
+    }, () => {});
+  }
   await db.from('restaurants').upsert({
     owner_id: currentUser.id, name: document.getElementById('restName').value,
     address: document.getElementById('restAddress').value,
     description: document.getElementById('restDesc').value,
-    is_open: document.getElementById('restOpen').checked
+    is_open: document.getElementById('restOpen').checked, ...geo
   }, { onConflict: 'owner_id' });
   showToast('✅ Restaurante guardado');
   loadRestaurants();
@@ -351,7 +437,7 @@ async function loadMyMenu() {
     `<div class="row-item"><div class="row-main"><b>${i.name}</b><small>◈ ${i.price} · ${i.is_available ? 'Disponible' : 'Agotado'}</small></div>
      <div class="row-actions">
        <button class="btn-small warn" onclick="toggleMenuItem('${i.id}', ${!i.is_available})">${i.is_available ? 'Agotar' : 'Activar'}</button>
-       <button class="btn-small danger" onclick="deleteMenuItem('${i.id}')"></button>
+       <button class="btn-small danger" onclick="deleteMenuItem('${i.id}')">🗑</button>
      </div></div>`).join('') || '<p class="empty-state">Sin platos aún</p>';
 }
 async function addMenuItem(e) {
@@ -368,6 +454,7 @@ async function addMenuItem(e) {
 async function toggleMenuItem(id, avail) { await db.from('menu_items').update({ is_available: avail }).eq('id', id); loadMyMenu(); }
 async function deleteMenuItem(id) { if (!confirm('¿Eliminar plato?')) return; await db.from('menu_items').delete().eq('id', id); loadMyMenu(); }
 async function viewMenu(restId) {
+  window._lastMenuRest = restId;
   const { data: rest } = await db.from('restaurants').select('*').eq('id', restId).single();
   const { data } = await db.from('menu_items').select('*').eq('restaurant_id', restId).eq('is_available', true);
   document.getElementById('restModalTitle').textContent = '🍽️ ' + rest.name;
@@ -379,16 +466,12 @@ async function viewMenu(restId) {
   openModal('modal-restaurant');
 }
 function addToCart(id, name, price) {
-  if (cart.restId && cart.restId !== currentMenuRestId()) { cart = { restId: null, restName: '', items: [] }; }
-  cart.restId = currentMenuRestId();
-  const existing = cart.items.find(i => i.id === id);
-  if (existing) existing.qty++; else cart.items.push({ id, name, price, qty: 1 });
+  if (cart.restId && cart.restId !== window._lastMenuRest) cart = { restId: null, restName: '', items: [] };
+  cart.restId = window._lastMenuRest;
+  const ex = cart.items.find(i => i.id === id);
+  if (ex) ex.qty++; else cart.items.push({ id, name, price, qty: 1 });
   updateCartFab(); showToast('🛒 ' + name + ' agregado');
 }
-function currentMenuRestId() {
-  return document.getElementById('restModalTitle').dataset.restId || window._lastMenuRest;
-}
-async function openCartFromMenu(restId) { window._lastMenuRest = restId; }
 function updateCartFab() {
   const count = cart.items.reduce((s, i) => s + i.qty, 0);
   document.getElementById('cartFab').classList.toggle('hidden', count === 0);
@@ -416,29 +499,39 @@ async function checkout() {
   const address = document.getElementById('cartAddress').value.trim();
   if (!address) { showToast('Escribe la dirección de entrega'); return; }
   const total = cartTotal();
-  if (parseFloat(currentProfile.tokens_balance) < total) { showToast('❌ Saldo insuficiente. Recarga tokens.'); return; }
+  if (parseFloat(currentProfile.tokens_balance) < total) { showToast('❌ Saldo insuficiente'); return; }
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  const pos = await getPos();
   const { data: order } = await db.from('orders').insert({
     customer_id: currentUser.id, restaurant_id: cart.restId,
-    status: 'pending', total: total, delivery_address: address
+    status: 'pending', total, delivery_address: address, delivery_code: code,
+    customer_lat: pos?.lat || null, customer_lng: pos?.lng || null
   }).select().single();
   await db.from('order_items').insert(cart.items.map(i => ({ order_id: order.id, item_name: i.name, quantity: i.qty, unit_price: i.price })));
   await deductTokens(total, 'Pedido en restaurante');
   cart = { restId: null, restName: '', items: [] }; updateCartFab();
   closeModal('modal-cart'); closeModal('modal-restaurant');
-  showToast('✅ Pedido realizado. ¡Buen provecho!');
+  showToast('✅ Pedido realizado. Tu código de entrega: 🔐 ' + code);
   showSection('orders');
 }
+function getPos() {
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(p => res({ lat: p.coords.latitude, lng: p.coords.longitude }), () => res(null), { timeout: 4000 });
+  });
+}
 
-// ===== PEDIDOS =====
+// ===== PEDIDOS + CALIFICACIÓN =====
 async function loadOrders() {
   const { data: mine } = await db.from('orders').select('*, restaurants(name), order_items(*)').eq('customer_id', currentUser.id).order('created_at', { ascending: false });
   document.getElementById('ordersList').innerHTML = (mine || []).map(o =>
     `<div class="row-item"><div class="row-main"><b>${o.restaurants?.name || 'Restaurante'}</b>
      <small>${(o.order_items || []).map(i => i.quantity + 'x ' + i.item_name).join(', ')}</small>
-     <small>📍 ${o.delivery_address} · ◈ ${o.total}</small></div>
+     <small>📍 ${o.delivery_address} · ◈ ${o.total}</small>
+     ${['ready','delivering'].includes(o.status) ? `<small style="color:var(--warning)">🔐 Tu código: <b>${o.delivery_code}</b></small>` : ''}
+     ${o.status === 'delivered' && !o.rated && o.driver_id ? `<button class="btn-small warn" onclick="openRateModal('${o.id}','${o.driver_id}')">⭐ Calificar delivery</button>` : ''}</div>
      <span class="order-status st-${o.status}">${ORDER_LABELS[o.status]}</span></div>`).join('')
     || '<p class="empty-state">Aún no has pedido nada</p>';
-
   const isOwner = currentProfile.role === 'restaurant';
   document.getElementById('ownerOrdersWrap').classList.toggle('hidden', !isOwner);
   if (isOwner) {
@@ -461,18 +554,222 @@ async function loadOrders() {
   const isDriver = currentProfile.role === 'delivery';
   document.getElementById('driverOrdersWrap').classList.toggle('hidden', !isDriver);
   if (isDriver) {
-    const { data: avail } = await db.from('orders').select('*, restaurants(name), order_items(*)').eq('status', 'ready').is('driver_id', null);
     const { data: mineDrv } = await db.from('orders').select('*, restaurants(name)').eq('driver_id', currentUser.id).eq('status', 'delivering');
-    document.getElementById('driverOrdersList').innerHTML =
-      (avail || []).map(o => `<div class="row-item"><div class="row-main"><b>${o.restaurants?.name}</b><small>📍 ${o.delivery_address} · ◈ ${o.total}</small></div>
-        <button class="btn-small success" onclick="acceptOrder('${o.id}')">🛵 Aceptar</button></div>`).join('') +
-      (mineDrv || []).map(o => `<div class="row-item"><div class="row-main"><b>${o.restaurants?.name}</b><small>📍 ${o.delivery_address} · ◈ ${o.total}</small></div>
-        <button class="btn-small success" onclick="advanceOrder('${o.id}','delivered')">📦 Entregado</button></div>`).join('')
-      || '<p class="empty-state">No hay pedidos disponibles ahora</p>';
+    document.getElementById('driverOrdersList').innerHTML = (mineDrv || []).map(o =>
+      `<div class="row-item"><div class="row-main"><b>${o.restaurants?.name}</b><small>📍 ${o.delivery_address}</small></div>
+       <button class="btn-small success" onclick="showSection('delivery')">Ir a mi entrega</button></div>`).join('')
+      || '<p class="empty-state">Sin entregas activas (mira las ofertas en Zona Domiciliario)</p>';
   }
 }
-async function advanceOrder(id, status) { await db.from('orders').update({ status }).eq('id', id); showToast('✅ Estado: ' + ORDER_LABELS[status]); loadOrders(); }
-async function acceptOrder(id) { await db.from('orders').update({ driver_id: currentUser.id, status: 'delivering' }).eq('id', id); showToast('🛵 Pedido aceptado'); loadOrders(); }
+async function advanceOrder(id, status) { await db.from('orders').update({ status }).eq('id', id); showToast('✅ ' + ORDER_LABELS[status]); loadOrders(); loadDeliveryHub(); }
+
+// ===== ZONA DOMICILIARIO PRO =====
+async function loadDeliveryHub() {
+  if (currentProfile.role !== 'delivery') return;
+  const p = currentProfile, rd = roleDetails || {};
+  const pct = p.total_deliveries > 0 ? Math.round((p.completed_deliveries / p.total_deliveries) * 100) : 100;
+  const vehicle = { moto: '🏍️ Moto', bicicleta: '🚲 Bicicleta', carro: '🚗 Carro' }[rd.vehicle_type] || '🛵 Vehículo';
+  document.getElementById('driverCard').innerHTML = `
+    ${p.avatar_url ? `<img src="${p.avatar_url}">` : `<div class="drv-letter">${(p.full_name || 'D').charAt(0).toUpperCase()}</div>`}
+    <div class="drv-info">
+      <b>${p.full_name}</b> ${p.is_verified ? '✅' : '⏳'}
+      <div class="rep-stars" style="font-size:1rem">${stars(p.rating)} ${parseFloat(p.rating || 5).toFixed(1)}</div>
+      <div class="drv-meta">${p.completed_deliveries || 0} entregas · ${pct}% completadas</div>
+      <div class="drv-meta">${vehicle} · ${rd.vehicle_plate || 'sin placa'}</div>
+    </div>`;
+  const avail = !!p.driver_available;
+  document.getElementById('availCard').classList.toggle('on', avail);
+  document.getElementById('availText').textContent = avail ? '🟢 ESTÁS DISPONIBLE' : '🔴 NO DISPONIBLE';
+  document.getElementById('btnToggleAvail').textContent = avail ? 'Desconectarme' : 'Conectarme';
+  await loadOffers();
+  await loadActiveDelivery();
+  await loadEarnings();
+  await loadReputation();
+}
+async function toggleAvailability() {
+  const now = !currentProfile.driver_available;
+  await db.from('profiles').update({ driver_available: now }).eq('id', currentUser.id);
+  currentProfile.driver_available = now;
+  showToast(now ? '🟢 Conectado: recibirás ofertas' : '🔴 Desconectado');
+  loadDeliveryHub();
+}
+async function loadOffers() {
+  const { data } = await db.from('orders').select('*, restaurants(name, address, latitude, longitude), order_items(*)')
+    .eq('status', 'ready').is('driver_id', null).order('created_at', { ascending: false });
+  const offers = (data || []).filter(o => !rejectedOffers.has(o.id));
+  document.getElementById('offersCount').textContent = offers.length + ' entregas cerca de ti';
+  document.getElementById('offersList').innerHTML = offers.map(o => {
+    const dist = (myLocation && o.restaurants?.latitude) ? haversine(myLocation.lat, myLocation.lng, o.restaurants.latitude, o.restaurants.longitude) : null;
+    const gain = (parseFloat(o.total) * 0.85).toFixed(2);
+    const eta = dist !== null ? Math.round((dist / 1000 / 20) * 60 + 12) : null;
+    const zone = (o.restaurants?.address || '').split(',')[0] + ' ···';
+    return `<div class="offer-card">
+      <div class="offer-head"><b>🎁 ${o.restaurants?.name || 'Restaurante'}</b><span class="offer-gain">◈ ${gain}</span></div>
+      <div class="offer-data">Recoger: <span class="locked-addr">${zone}</span><br>
+        📏 ${dist !== null ? fmtDist(dist) : 'distancia desconocida'} · ⏱️ ${eta !== null ? eta + ' min aprox' : '—'} ·
+        🧾 ${(o.order_items || []).length} artículo(s)</div>
+      <div class="offer-actions">
+        <button class="btn-small success" onclick="acceptOffer('${o.id}')">✅ ACEPTAR</button>
+        <button class="btn-small danger" onclick="rejectOffer('${o.id}')">❌ RECHAZAR</button>
+      </div></div>`;
+  }).join('') || '<p class="empty-state">Sin ofertas nuevas por ahora</p>';
+}
+function rejectOffer(id) { rejectedOffers.add(id); loadOffers(); }
+async function acceptOffer(id) {
+  await db.from('orders').update({ driver_id: currentUser.id, status: 'delivering' }).eq('id', id);
+  await db.from('profiles').update({ total_deliveries: (currentProfile.total_deliveries || 0) + 1 }).eq('id', currentUser.id);
+  currentProfile.total_deliveries = (currentProfile.total_deliveries || 0) + 1;
+  showToast('✅ Entrega aceptada. Dirección desbloqueada.');
+  loadDeliveryHub();
+}
+async function loadActiveDelivery() {
+  const { data: o } = await db.from('orders').select('*, restaurants(name, latitude, longitude, address), profiles(full_name)').eq('driver_id', currentUser.id).eq('status', 'delivering').single();
+  const card = document.getElementById('activeDeliveryCard');
+  if (!o) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const picked = !!o.pickup_confirmed;
+  const dest = `https://www.google.com/maps/dir/?api=1&destination=${o.customer_lat || ''},${o.customer_lng || ''}`;
+  const pick = `https://www.google.com/maps/dir/?api=1&destination=${o.restaurants?.latitude || ''},${o.restaurants?.longitude || ''}`;
+  document.getElementById('deliverySteps').innerHTML = `
+    <div class="step ${picked ? 'done' : 'current'}">1️⃣ Ir al negocio: <b>${o.restaurants?.name}</b>
+      <a class="btn-small step-btn" target="_blank" href="${pick}">🗺️ Navegar</a></div>
+    <div class="step ${picked ? 'done' : ''}">2️⃣ Recoger el pedido embalado</div>
+    <div class="step ${picked ? 'done' : 'current'}">3️⃣ Confirmar recogida
+      ${!picked ? `<button class="btn-small success step-btn" onclick="confirmPickup('${o.id}')">Confirmar</button>` : ''}</div>
+    <div class="step ${picked ? 'current' : ''}">4️⃣ Ir al destino: <b>${o.delivery_address}</b>
+      <a class="btn-small step-btn" target="_blank" href="${dest}">🗺️ Navegar</a></div>
+    <div class="step">5️⃣ Entregar: pide el 🔐 código al cliente y toma foto</div>
+    <div class="step">6️⃣ Confirmar entrega con código (abajo)</div>`;
+  window._activeOrder = o;
+}
+async function confirmPickup(id) {
+  await db.from('orders').update({ pickup_confirmed: true }).eq('id', id);
+  showToast('📦 Recogida confirmada. ¡Rumbo al destino!');
+  loadActiveDelivery();
+}
+async function confirmDelivery() {
+  const o = window._activeOrder;
+  if (!o) { showToast('No tienes entrega activa'); return; }
+  const code = document.getElementById('codeInput').value.trim();
+  if (code !== o.delivery_code) { showToast('❌ Código incorrecto. Pídeselo al cliente.'); navigator.vibrate?.(300); return; }
+  let proofUrl = null;
+  const f = document.getElementById('proofPhoto').files[0];
+  if (f) {
+    const path = 'proofs/' + o.id + '_' + Date.now() + '.jpg';
+    const { error } = await db.storage.from('fendyx-assets').upload(path, f);
+    if (!error) proofUrl = db.storage.from('fendyx-assets').getPublicUrl(path).data.publicUrl;
+  }
+  const pos = await getPos();
+  const earning = parseFloat((parseFloat(o.total) * 0.85).toFixed(2));
+  await db.from('orders').update({
+    status: 'delivered', delivered_at: new Date().toISOString(),
+    proof_photo_url: proofUrl, delivery_lat: pos?.lat || null, delivery_lng: pos?.lng || null,
+    driver_earning: earning
+  }).eq('id', o.id);
+  const newBal = parseFloat(currentProfile.tokens_balance) + earning;
+  await db.from('profiles').update({
+    tokens_balance: newBal,
+    completed_deliveries: (currentProfile.completed_deliveries || 0) + 1
+  }).eq('id', currentUser.id);
+  await db.from('token_transactions').insert({ user_id: currentUser.id, amount: earning, type: 'transfer', description: 'Ganancia entrega #' + o.id.slice(0, 4) });
+  currentProfile.tokens_balance = newBal;
+  currentProfile.completed_deliveries = (currentProfile.completed_deliveries || 0) + 1;
+  document.getElementById('codeInput').value = '';
+  updateHeader();
+  showToast('✅ Entrega confirmada. Ganaste ◈ ' + earning.toFixed(2));
+  loadDeliveryHub();
+}
+async function loadEarnings() {
+  const { data } = await db.from('orders').select('driver_earning, tip, delivered_at').eq('driver_id', currentUser.id).eq('status', 'delivered');
+  const rows = data || [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const week = new Date(Date.now() - 7 * 86400000);
+  const sum = (arr, f) => arr.reduce((s, x) => s + parseFloat(f(x) || 0), 0);
+  const todayRows = rows.filter(r => new Date(r.delivered_at) >= today);
+  document.getElementById('earnToday').textContent = sum(todayRows, r => r.driver_earning).toFixed(2);
+  document.getElementById('earnCount').textContent = todayRows.length;
+  document.getElementById('earnTips').textContent = sum(rows, r => r.tip).toFixed(2);
+  document.getElementById('earnWeek').textContent = sum(rows.filter(r => new Date(r.delivered_at) >= week), r => r.driver_earning).toFixed(2);
+  document.getElementById('earnBalance').textContent = parseFloat(currentProfile.tokens_balance || 0).toFixed(2);
+  const { data: w } = await db.from('withdrawals').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  document.getElementById('withdrawalsList').innerHTML = (w || []).map(x =>
+    `<div class="row-item"><div class="row-main"><b>◈ ${x.amount}</b><small>${x.method} · ${new Date(x.created_at).toLocaleDateString()}</small></div>
+     <span class="order-status ${x.status === 'pending' ? 'st-pending' : 'st-delivered'}">${x.status === 'pending' ? 'Pendiente' : 'Aprobado'}</span></div>`).join('')
+    || '<p class="empty-state">Sin retiros solicitados</p>';
+}
+async function requestWithdrawal() {
+  const amount = parseFloat(document.getElementById('withdrawAmount').value);
+  if (!amount || amount <= 0) { showToast('Monto inválido'); return; }
+  if (amount > parseFloat(currentProfile.tokens_balance)) { showToast('❌ Saldo insuficiente'); return; }
+  await db.from('withdrawals').insert({ user_id: currentUser.id, amount, method: document.getElementById('withdrawMethod').value });
+  await deductTokens(amount, 'Solicitud de retiro');
+  document.getElementById('withdrawAmount').value = '';
+  showToast('🏦 Retiro solicitado. El admin lo procesará.');
+  loadEarnings();
+}
+async function loadReputation() {
+  const p = currentProfile;
+  document.getElementById('repStars').textContent = stars(p.rating) + ' ' + parseFloat(p.rating || 5).toFixed(1);
+  document.getElementById('repLevel').textContent = driverLevel(p.completed_deliveries || 0);
+  const { data } = await db.from('ratings').select('*').eq('ratee_id', currentUser.id);
+  const cats = {};
+  (data || []).forEach(r => { cats[r.category] = cats[r.category] || []; cats[r.category].push(r.score); });
+  document.getElementById('repBreakdown').innerHTML = Object.entries(cats).map(([c, arr]) =>
+    `<span class="chip">${c}: ${(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)} ⭐</span>`).join('')
+    || '<span class="chip">Aún sin calificaciones</span>';
+}
+
+// ===== CALIFICAR DELIVERY =====
+function openRateModal(orderId, driverId) {
+  let m = document.getElementById('modal-rate');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'modal-rate'; m.className = 'modal hidden';
+    m.innerHTML = `<div class="modal-content"><div class="modal-head"><h3>⭐ Calificar entrega</h3><button class="modal-close" onclick="closeModal('modal-rate')">✕</button></div>
+      <div class="rate-stars" id="rateStars" style="font-size:2rem;text-align:center;margin:10px 0">
+        ${[1,2,3,4,5].map(n => `<span onclick="setRate(${n})" style="cursor:pointer;color:#ffc93c">★</span>`).join('')}
+      </div>
+      <select id="rateCategory" class="input-full"><option value="puntualidad">⏱️ Puntualidad</option><option value="trato">😊 Trato</option><option value="cuidado">📦 Cuidado del pedido</option><option value="entrega">✅ Entrega correcta</option></select>
+      <input type="number" id="rateTip" class="input-full" placeholder="Propina opcional (tokens)" min="0" step="0.5">
+      <input type="text" id="rateComment" class="input-full" placeholder="Comentario (opcional)">
+      <button class="btn-primary" onclick="submitRate()">Enviar calificación</button></div>`;
+    document.body.appendChild(m);
+  }
+  window._rateTarget = { orderId, driverId, score: 5 };
+  m.classList.remove('hidden');
+}
+function setRate(n) {
+  window._rateTarget.score = n;
+  document.querySelectorAll('#rateStars span').forEach((s, i) => s.style.opacity = i < n ? 1 : 0.25);
+}
+async function submitRate() {
+  const t = window._rateTarget;
+  const tip = parseFloat(document.getElementById('rateTip').value) || 0;
+  if (tip > parseFloat(currentProfile.tokens_balance)) { showToast('❌ Saldo insuficiente para la propina'); return; }
+  await db.from('ratings').insert({
+    order_id: t.orderId, rater_id: currentUser.id, ratee_id: t.driverId,
+    score: t.score, category: document.getElementById('rateCategory').value,
+    comment: document.getElementById('rateComment').value
+  });
+  const { data: all } = await db.from('ratings').select('score').eq('ratee_id', t.driverId);
+  const avg = (all || []).reduce((s, r) => s + r.score, 0) / ((all || []).length || 1);
+  await db.from('profiles').update({ rating: avg.toFixed(2) }).eq('id', t.driverId);
+  if (tip > 0) {
+    const { data: drv } = await db.from('profiles').select('tokens_balance').eq('id', t.driverId).single();
+    await db.from('profiles').update({ tokens_balance: parseFloat(currentProfile.tokens_balance) - tip }).eq('id', currentUser.id);
+    await db.from('profiles').update({ tokens_balance: parseFloat(drv.tokens_balance) + tip }).eq('id', t.driverId);
+    await db.from('token_transactions').insert([
+      { user_id: currentUser.id, amount: -tip, type: 'consumption', description: 'Propina a domiciliario' },
+      { user_id: t.driverId, amount: tip, type: 'transfer', description: 'Propina recibida' }
+    ]);
+    currentProfile.tokens_balance = parseFloat(currentProfile.tokens_balance) - tip;
+    updateHeader();
+  }
+  await db.from('orders').update({ rated: true, tip }).eq('id', t.orderId);
+  closeModal('modal-rate');
+  showToast('⭐ ¡Gracias por calificar!');
+  loadOrders();
+}
 
 // ===== TRABAJO REMOTO + JITSI =====
 async function loadWorkers() {
@@ -491,7 +788,7 @@ async function loadWorkers() {
     return `<div class="card-item">
       <div class="card-title">${w.full_name}</div>
       <span class="status-pill ${w.is_online ? 'online' : 'offline'}">${w.is_online ? 'EN LÍNEA' : 'DESCONECTADO'}</span>
-      <div class="card-desc">${rd?.specialty || 'Sin especialidad'}</div>
+      <div class="card-desc">${rd?.specialty || 'Sin especialidad'} · ${stars(w.rating)}</div>
       <div class="card-meta">${rd?.bio || ''}</div>
       <div class="price-tag">◈ ${rd?.rate_per_minute || 1}/min</div><br>
       <button class="btn-small success" onclick="startCall('${w.id}', ${rd?.rate_per_minute || 1})" ${w.is_online ? '' : 'disabled'}>📹 Llamar</button>
@@ -527,10 +824,7 @@ async function startCall(workerId, rate) {
   iAmClient = true; currentCallRate = rate;
   openCallUI(call.id, roomId);
 }
-async function joinCall(callId, roomId, rate) {
-  iAmClient = false; currentCallRate = rate;
-  openCallUI(callId, roomId);
-}
+async function joinCall(callId, roomId, rate) { iAmClient = false; currentCallRate = rate; openCallUI(callId, roomId); }
 function openCallUI(callId, roomId) {
   currentCallId = callId; callSeconds = 0; callCostTotal = 0;
   document.getElementById('callTimer').textContent = '00:00';
@@ -545,8 +839,7 @@ function openCallUI(callId, roomId) {
   });
   callInterval = setInterval(async () => {
     callSeconds++;
-    const m = String(Math.floor(callSeconds / 60)).padStart(2, '0'), s = String(callSeconds % 60).padStart(2, '0');
-    document.getElementById('callTimer').textContent = m + ':' + s;
+    document.getElementById('callTimer').textContent = String(Math.floor(callSeconds / 60)).padStart(2, '0') + ':' + String(callSeconds % 60).padStart(2, '0');
     if (iAmClient && callSeconds % 60 === 0) {
       callCostTotal += currentCallRate;
       document.getElementById('callCost').textContent = '◈ ' + callCostTotal.toFixed(2);
@@ -561,9 +854,7 @@ function openCallUI(callId, roomId) {
 async function endCall() {
   if (jitsiApi) { jitsiApi.dispose(); jitsiApi = null; }
   if (callInterval) { clearInterval(callInterval); callInterval = null; }
-  if (currentCallId) {
-    await db.from('video_calls').update({ status: 'ended', ended_at: new Date().toISOString(), total_cost: callCostTotal }).eq('id', currentCallId);
-  }
+  if (currentCallId) await db.from('video_calls').update({ status: 'ended', ended_at: new Date().toISOString(), total_cost: callCostTotal }).eq('id', currentCallId);
   currentCallId = null;
   closeModal('modal-call');
   showToast('📞 Llamada finalizada · Costo: ◈ ' + callCostTotal.toFixed(2));
@@ -582,10 +873,10 @@ async function loadMarketplace() {
       ${i.seller_id !== currentUser.id ?
         `<button class="btn-small success" onclick="buyItem('${i.id}',${i.price},'${i.seller_id}')">Comprar</button>
          <button class="btn-small" onclick="startChatWith('${i.seller_id}')">💬</button>` : ''}
-    </div>`).join('') || '<p class="empty-state">Marketplace vacío. ¡Publica el primero!</p>';
+    </div>`).join('') || '<p class="empty-state">Marketplace vacío</p>';
   const { data: mine } = await db.from('marketplace_items').select('*').eq('seller_id', currentUser.id);
   document.getElementById('myListings').innerHTML = (mine || []).map(i =>
-    `<div class="row-item"><div class="row-main"><b>${i.title}</b><small>◈ ${i.price} · ${i.is_active ? 'Activo' : 'Vendido/Inactivo'}</small></div>
+    `<div class="row-item"><div class="row-main"><b>${i.title}</b><small>◈ ${i.price} · ${i.is_active ? 'Activo' : 'Inactivo'}</small></div>
      <div class="row-actions">
        <button class="btn-small warn" onclick="toggleListing('${i.id}',${!i.is_active})">${i.is_active ? 'Pausar' : 'Activar'}</button>
        <button class="btn-small danger" onclick="deleteListing('${i.id}')">🗑</button>
@@ -630,15 +921,11 @@ async function buyItem(id, price, sellerId) {
 async function loadConversations() {
   const { data } = await db.from('conversations').select('*').or(`user_a.eq.${currentUser.id},user_b.eq.${currentUser.id}`);
   convCache = data || [];
-  if (!convCache.length) {
-    document.getElementById('chatList').innerHTML = '<p class="empty-state">Inicia un chat desde el Mapa, Radar o Marketplace</p>';
-    return;
-  }
+  if (!convCache.length) { document.getElementById('chatList').innerHTML = '<p class="empty-state">Inicia un chat desde el Mapa, Radar o Marketplace</p>'; return; }
   const otherIds = convCache.map(c => c.user_a === currentUser.id ? c.user_b : c.user_a);
-  const { data: profs } = await db.from('profiles').select('id, full_name').in('id', otherIds);
-  const pMap = {}; (profs || []).forEach(p => pMap[p.id] = p.full_name);
-  const convIds = convCache.map(c => c.id);
-  const { data: msgs } = await db.from('messages').select('*').in('conversation_id', convIds).order('created_at', { ascending: false }).limit(300);
+  const { data: profs } = await db.from('profiles').select('id, full_name, avatar_url').in('id', otherIds);
+  const pMap = {}; (profs || []).forEach(p => pMap[p.id] = p);
+  const { data: msgs } = await db.from('messages').select('*').in('conversation_id', convCache.map(c => c.id)).order('created_at', { ascending: false }).limit(300);
   const lastByConv = {}, unreadByConv = {};
   (msgs || []).forEach(m => {
     if (!lastByConv[m.conversation_id]) lastByConv[m.conversation_id] = m.content;
@@ -648,11 +935,10 @@ async function loadConversations() {
     const other = c.user_a === currentUser.id ? c.user_b : c.user_a;
     const un = unreadByConv[c.id] || 0;
     return `<div class="conv-item ${c.id === currentConvId ? 'active' : ''}" onclick="openConversation('${c.id}')">
-      <div class="conv-avatar">${(pMap[other] || 'U').charAt(0).toUpperCase()}</div>
-      <div class="conv-info"><div class="conv-name">${pMap[other] || 'Usuario'}</div>
+      <div class="conv-avatar">${(pMap[other]?.full_name || 'U').charAt(0).toUpperCase()}</div>
+      <div class="conv-info"><div class="conv-name">${pMap[other]?.full_name || 'Usuario'}</div>
       <div class="conv-last">${lastByConv[c.id] || 'Sin mensajes'}</div></div>
-      ${un ? `<span class="unread-badge">${un}</span>` : ''}
-    </div>`;
+      ${un ? `<span class="unread-badge">${un}</span>` : ''}</div>`;
   }).join('');
 }
 async function openConversation(id) {
@@ -684,7 +970,7 @@ async function sendMessage() {
 }
 async function startChatWith(userId) {
   if (userId === currentUser.id) { showToast('No puedes escribirte a ti mismo 😅'); return; }
-  closeModal('modal-profile');
+  closeModal('modal-profile'); closeModal('modal-userprofile');
   let conv = convCache.find(c => (c.user_a === currentUser.id && c.user_b === userId) || (c.user_b === currentUser.id && c.user_a === userId));
   if (!conv) {
     const { data } = await db.from('conversations').insert({ user_a: currentUser.id, user_b: userId }).select().single();
@@ -735,7 +1021,6 @@ async function transferTokens() {
     { user_id: dest.id, amount, type: 'transfer', description: 'Recibido de ' + currentProfile.email }
   ]);
   await loadProfile(); updateHeader(); loadTransactions();
-  document.getElementById('transferEmail').value = ''; document.getElementById('transferAmount').value = '';
   showToast('✅ Transferencia completada');
 }
 async function deductTokens(amount, desc) {
@@ -745,7 +1030,7 @@ async function deductTokens(amount, desc) {
   currentProfile.tokens_balance = newBal; updateHeader();
 }
 
-// ===== PERFIL =====
+// ===== PERFIL BÁSICO =====
 async function loadProfileSection() {
   const p = currentProfile;
   document.getElementById('profileName').textContent = p.full_name || 'Usuario';
@@ -762,14 +1047,7 @@ async function loadProfileSection() {
 }
 async function saveProfile(e) {
   e.preventDefault();
-  const updates = { full_name: document.getElementById('editName').value || currentProfile.full_name };
-  const file = document.getElementById('editAvatar').files[0];
-  if (file) {
-    const path = 'avatars/' + currentUser.id + '_' + Date.now() + '.png';
-    const { error } = await db.storage.from('fendyx-assets').upload(path, file);
-    if (!error) updates.avatar_url = db.storage.from('fendyx-assets').getPublicUrl(path).data.publicUrl;
-  }
-  await db.from('profiles').update(updates).eq('id', currentUser.id);
+  await db.from('profiles').update({ full_name: document.getElementById('editName').value || currentProfile.full_name }).eq('id', currentUser.id);
   await db.from('role_details').upsert({ user_id: currentUser.id, role_type: currentProfile.role, relationship_status: document.getElementById('editStatus').value }, { onConflict: 'user_id' });
   await loadProfile(); updateHeader(); loadProfileSection();
   showToast('✅ Perfil actualizado');
@@ -780,18 +1058,6 @@ async function loadProfile() {
   const { data: rd } = await db.from('role_details').select('*').eq('user_id', currentUser.id).single();
   roleDetails = rd;
 }
-function viewUserProfile(userId) {
-  db.from('profiles').select('*, role_details(*)').eq('id', userId).single().then(({ data }) => {
-    if (!data) return;
-    viewedUserId = userId;
-    document.getElementById('viewProfileAvatar').textContent = (data.full_name || 'U').charAt(0).toUpperCase();
-    document.getElementById('viewProfileName').textContent = data.full_name || 'Usuario';
-    document.getElementById('viewProfileRole').textContent = ROLE_LABELS[data.role] || data.role;
-    document.getElementById('viewProfileBio').textContent = data.bio || data.role_details?.[0]?.bio || 'Sin descripción';
-    openModal('modal-profile');
-  });
-}
-function messageFromProfile() { if (viewedUserId) startChatWith(viewedUserId); }
 
 // ===== PANEL ADMIN =====
 async function loadAdmin() {
@@ -803,12 +1069,12 @@ function switchAdminTab(tab, btn) {
   btn.classList.add('active');
   document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('admin-' + tab).classList.add('active');
-  const loaders = { overview: loadAdminOverview, branding: () => {}, users: loadAdminUsers, tokens: loadAdminTransactions, content: loadAdminContent };
+  const loaders = { overview: loadAdminOverview, users: loadAdminUsers, tokens: loadAdminTransactions, content: loadAdminContent };
   loaders[tab]?.();
 }
 async function loadAdminOverview() {
-  const [u, t, o, c, tx] = await Promise.all([
-    db.from('profiles').select('tokens_balance', { count: 'exact', head: false }),
+  const [u, t, c, tx] = await Promise.all([
+    db.from('profiles').select('tokens_balance'),
     db.from('orders').select('*', { count: 'exact', head: true }),
     db.from('video_calls').select('*', { count: 'exact', head: true }),
     db.from('token_transactions').select('*, profiles(email)').order('created_at', { ascending: false }).limit(8)
@@ -860,36 +1126,32 @@ function renderAdminUsers() {
          : `<button class="btn-small danger" onclick="toggleBan('${u.id}',true)">Banear</button>`) : ''}
      </td></tr>`).join('');
 }
-async function verifyUser(id) { await db.from('profiles').update({ is_verified: true }).eq('id', id); showToast('✅ Usuario verificado'); loadAdminUsers(); }
+async function verifyUser(id) { await db.from('profiles').update({ is_verified: true }).eq('id', id); showToast('✅ Verificado'); loadAdminUsers(); }
 async function toggleBan(id, ban) {
-  if (!confirm(ban ? '¿Banear usuario?' : '¿Desbanear usuario?')) return;
+  if (!confirm(ban ? '¿Banear usuario?' : '¿Desbanear?')) return;
   await db.from('profiles').update({ is_banned: ban }).eq('id', id);
-  showToast(ban ? '🚫 Usuario baneado' : '✅ Usuario desbaneado');
-  loadAdminUsers();
+  showToast(ban ? '🚫 Baneado' : '✅ Desbaneado'); loadAdminUsers();
 }
 async function adminAdjustTokens() {
   const email = document.getElementById('adminTokenEmail').value.trim();
   const amount = parseFloat(document.getElementById('adminTokenAmount').value);
   if (!email || !amount) { showToast('Completa email y cantidad'); return; }
   const { data: u } = await db.from('profiles').select('*').eq('email', email).single();
-  if (!u) { showToast('❌ Usuario no encontrado'); return; }
+  if (!u) { showToast('❌ No encontrado'); return; }
   await db.from('profiles').update({ tokens_balance: parseFloat(u.tokens_balance) + amount }).eq('id', u.id);
-  await db.from('token_transactions').insert({ user_id: u.id, amount, type: amount >= 0 ? 'recharge' : 'consumption', description: 'Ajuste manual del administrador' });
-  showToast('✅ Ajuste aplicado a ' + email);
-  loadAdminTransactions(); loadAdminOverview();
+  await db.from('token_transactions').insert({ user_id: u.id, amount, type: amount >= 0 ? 'recharge' : 'consumption', description: 'Ajuste del administrador' });
+  showToast('✅ Ajuste aplicado'); loadAdminTransactions(); loadAdminOverview();
 }
 async function loadAdminTransactions() {
   const { data } = await db.from('token_transactions').select('*, profiles(email)').order('created_at', { ascending: false }).limit(50);
   document.getElementById('adminTransactions').innerHTML = (data || []).map(t =>
-    `<div class="tx-item"><div><b>${t.profiles?.email || '—'}</b><small>${t.description || t.type} · ${new Date(t.created_at).toLocaleDateString()}</small></div>
+    `<div class="tx-item"><div><b>${t.profiles?.email || '—'}</b><small>${t.description || t.type}</small></div>
      <span class="tx-amount ${t.amount >= 0 ? 'positive' : 'negative'}">${t.amount >= 0 ? '+' : ''}${t.amount}</span></div>`).join('')
     || '<p class="empty-state">Sin transacciones</p>';
 }
 async function loadAdminContent() {
   const [r, n, m] = await Promise.all([
-    db.from('restaurants').select('id, name'),
-    db.from('nightclubs').select('id, name'),
-    db.from('marketplace_items').select('id, title')
+    db.from('restaurants').select('id, name'), db.from('nightclubs').select('id, name'), db.from('marketplace_items').select('id, title')
   ]);
   document.getElementById('adminRestaurants').innerHTML = (r.data || []).map(x => `<div class="row-item"><div class="row-main"><b>${x.name}</b></div><button class="btn-small danger" onclick="deleteContent('restaurants','${x.id}')">🗑</button></div>`).join('') || '<p class="empty-state">Vacío</p>';
   document.getElementById('adminNightclubs').innerHTML = (n.data || []).map(x => `<div class="row-item"><div class="row-main"><b>${x.name}</b></div><button class="btn-small danger" onclick="deleteContent('nightclubs','${x.id}')">🗑</button></div>`).join('') || '<p class="empty-state">Vacío</p>';
@@ -898,8 +1160,7 @@ async function loadAdminContent() {
 async function deleteContent(table, id) {
   if (!confirm('¿Eliminar definitivamente?')) return;
   await db.from(table).delete().eq('id', id);
-  showToast('🗑 Contenido eliminado');
-  loadAdminContent();
+  showToast('🗑 Eliminado'); loadAdminContent();
 }
 
 // ===== TIEMPO REAL =====
@@ -916,6 +1177,7 @@ function startRealtime() {
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
       if (document.getElementById('section-orders').classList.contains('active')) loadOrders();
+      if (document.getElementById('section-delivery').classList.contains('active')) loadDeliveryHub();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'radar_presences' }, () => {
       if (currentClubId && document.getElementById('section-radar').classList.contains('active')) loadRadarUsers();
