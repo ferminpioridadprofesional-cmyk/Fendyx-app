@@ -1,429 +1,409 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FENDYX - Super App</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>FENDYX - Super App</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-    <!-- ===== PANTALLA: LOGIN/REGISTRO ===== -->
-    <div id="screen-auth" class="screen active">
-        <div class="auth-bg">
-            <div class="auth-card">
-                <div class="auth-logo">
-                    <img id="authLogo" src="" alt="Logo" style="display:none;max-width:80px;">
-                    <span id="authLogoFallback" class="logo-hex">⬡</span>
-                    <h1 id="authAppName">FENDYX</h1>
-                </div>
-                
-                <div class="auth-tabs">
-                    <button class="tab active" onclick="switchAuthTab('login')">Iniciar Sesión</button>
-                    <button class="tab" onclick="switchAuthTab('register')">Crear Cuenta</button>
-                </div>
-
-                <!-- LOGIN -->
-                <form id="form-login" class="auth-form active" onsubmit="handleLogin(event)">
-                    <div class="input-group">
-                        <input type="email" id="loginEmail" placeholder="Correo electrónico" required>
-                    </div>
-                    <div class="input-group password-group">
-                        <input type="password" id="loginPassword" placeholder="Contraseña" required>
-                        <button type="button" class="toggle-pass" onclick="togglePassword('loginPassword', this)">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
-                    </div>
-                    <button type="submit" class="btn-primary" id="btnLogin">Entrar</button>
-                    <p class="auth-link" onclick="resetPassword()">¿Olvidaste tu contraseña?</p>
-                </form>
-
-                <!-- REGISTRO -->
-                <form id="form-register" class="auth-form" onsubmit="handleRegister(event)">
-                    <div class="input-group">
-                        <input type="text" id="regName" placeholder="Nombre completo" required>
-                    </div>
-                    <div class="input-group">
-                        <input type="email" id="regEmail" placeholder="Correo electrónico" required>
-                    </div>
-                    <div class="input-group">
-                        <input type="number" id="regAge" placeholder="Edad (mínimo 18)" min="18" max="100" required>
-                    </div>
-                    <div class="input-group password-group">
-                        <input type="password" id="regPassword" placeholder="Contraseña (mín. 6 caracteres)" minlength="6" required>
-                        <button type="button" class="toggle-pass" onclick="togglePassword('regPassword', this)">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
-                    </div>
-                    <div class="input-group">
-                        <select id="regRole" onchange="showRoleFields()" required>
-                            <option value="">¿Qué tipo de cuenta?</option>
-                            <option value="user">👤 Usuario Normal</option>
-                            <option value="restaurant">🍽️ Restaurante / Local</option>
-                            <option value="delivery">🛵 Domiciliario</option>
-                            <option value="nightclub">🎵 Bar / Discoteca</option>
-                            <option value="remote_worker">💻 Trabajador Remoto</option>
-                        </select>
-                    </div>
-                    
-                    <!-- Campos dinámicos por rol -->
-                    <div id="roleFields"></div>
-                    
-                    <button type="submit" class="btn-primary" id="btnRegister">Crear Cuenta</button>
-                </form>
-                
-                <div id="authMessage" class="auth-message"></div>
-            </div>
+<!-- ========== PANTALLA AUTH ========== -->
+<div id="screen-auth" class="screen active">
+  <div class="auth-bg">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <img id="authLogo" alt="Logo" style="display:none;max-width:90px;border-radius:14px;">
+        <span id="authLogoFallback" class="logo-hex">⬡</span>
+        <h1 id="authAppName">FENDYX</h1>
+        <p class="auth-tagline">Tu super-app del futuro</p>
+      </div>
+      <div class="auth-tabs">
+        <button class="tab active" id="tabLogin" onclick="switchAuthTab('login')">Iniciar Sesión</button>
+        <button class="tab" id="tabRegister" onclick="switchAuthTab('register')">Crear Cuenta</button>
+      </div>
+      <form id="form-login" class="auth-form active" onsubmit="handleLogin(event)">
+        <div class="input-group"><input type="email" id="loginEmail" placeholder="Correo electrónico" required></div>
+        <div class="input-group password-group">
+          <input type="password" id="loginPassword" placeholder="Contraseña" required>
+          <button type="button" class="toggle-pass" onclick="togglePassword('loginPassword',this)">👁</button>
         </div>
-    </div>
-
-    <!-- ===== PANTALLA: APP PRINCIPAL ===== -->
-    <div id="screen-app" class="screen">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="header-left">
-                <img id="headerLogo" src="" alt="Logo" style="display:none;height:35px;">
-                <span id="headerLogoFallback" class="logo-hex small">⬡</span>
-                <h2 id="headerAppName">FENDYX</h2>
-            </div>
-            <div class="header-right">
-                <div class="token-badge" id="tokenBadge">
-                    <span class="token-icon">◈</span>
-                    <span id="userTokens">0</span>
-                </div>
-                <div class="user-avatar" id="userAvatar" onclick="toggleUserMenu()">U</div>
-            </div>
-        </header>
-
-        <!-- Menú usuario -->
-        <div id="userMenu" class="user-menu hidden">
-            <div class="menu-item" onclick="showSection('profile')">👤 Mi Perfil</div>
-            <div class="menu-item" onclick="showSection('tokens')">◈ Mis Tokens</div>
-            <div class="menu-item admin-only hidden" onclick="showSection('admin')">🛡️ Panel Admin</div>
-            <div class="menu-item logout" onclick="handleLogout()">🚪 Cerrar Sesión</div>
+        <button type="submit" class="btn-primary">Entrar</button>
+        <p class="auth-link" onclick="resetPassword()">¿Olvidaste tu contraseña?</p>
+      </form>
+      <form id="form-register" class="auth-form" onsubmit="handleRegister(event)">
+        <div class="input-group"><input type="text" id="regName" placeholder="Nombre completo" required></div>
+        <div class="input-group"><input type="email" id="regEmail" placeholder="Correo electrónico" required></div>
+        <div class="input-group"><input type="number" id="regAge" placeholder="Edad (mínimo 18)" min="18" max="100" required></div>
+        <div class="input-group password-group">
+          <input type="password" id="regPassword" placeholder="Contraseña (mín. 6)" minlength="6" required>
+          <button type="button" class="toggle-pass" onclick="togglePassword('regPassword',this)">👁</button>
         </div>
-
-        <!-- Contenido principal -->
-        <main class="app-main">
-            
-            <!-- SECCIÓN: DASHBOARD -->
-            <section id="section-dashboard" class="app-section active">
-                <div class="welcome-banner">
-                    <h2>¡Hola, <span id="welcomeName">Usuario</span>! 👋</h2>
-                    <p>¿Qué quieres hacer hoy?</p>
-                </div>
-                
-                <div class="modules-grid" id="modulesGrid">
-                    <!-- Se llena dinámicamente según rol -->
-                </div>
-            </section>
-
-            <!-- SECCIÓN: MAPA SOCIAL -->
-            <section id="section-map" class="app-section">
-                <div class="section-header">
-                    <h2>📍 Mapa Social</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="map-container" id="socialMap">
-                    <div class="map-placeholder">
-                        <p>🗺️ Mapa en tiempo real</p>
-                        <button class="btn-primary" onclick="shareLocation()">Compartir mi ubicación</button>
-                    </div>
-                </div>
-                <div class="nearby-users" id="nearbyUsers">
-                    <h3>Personas cerca</h3>
-                    <div id="nearbyList"></div>
-                </div>
-            </section>
-
-            <!-- SECCIÓN: RADAR NOCTURNO -->
-            <section id="section-radar" class="app-section">
-                <div class="section-header">
-                    <h2>🌙 Radar Nocturno</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="radar-status" id="radarStatus">
-                    <div class="radar-circle">
-                        <div class="radar-pulse"></div>
-                        <span class="radar-icon">📡</span>
-                    </div>
-                    <p id="radarText">Buscando discotecas cercanas...</p>
-                </div>
-                <div class="radar-controls">
-                    <select id="radarStatusSelect" onchange="updateRadarStatus()">
-                        <option value="single">💚 Soltero/a</option>
-                        <option value="married">💍 Casado/a</option>
-                        <option value="looking">👀 Buscando conocer</option>
-                        <option value="unavailable">🚫 No disponible</option>
-                    </select>
-                </div>
-                <div class="radar-users" id="radarUsers"></div>
-            </section>
-
-            <!-- SECCIÓN: RESTAURANTES -->
-            <section id="section-restaurants" class="app-section">
-                <div class="section-header">
-                    <h2>🍽️ Restaurantes</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="restaurants-list" id="restaurantsList"></div>
-                
-                <!-- Panel de dueño de restaurante -->
-                <div id="restaurantOwnerPanel" class="owner-panel hidden">
-                    <h3>📋 Mi Restaurante</h3>
-                    <form onsubmit="saveRestaurant(event)" class="owner-form">
-                        <input type="text" id="restName" placeholder="Nombre del restaurante" required>
-                        <input type="text" id="restAddress" placeholder="Dirección" required>
-                        <textarea id="restDesc" placeholder="Descripción"></textarea>
-                        <button type="submit" class="btn-primary">Guardar Restaurante</button>
-                    </form>
-                    <h3>🍕 Menú</h3>
-                    <form onsubmit="addMenuItem(event)" class="owner-form">
-                        <input type="text" id="menuItemName" placeholder="Nombre del plato" required>
-                        <input type="number" id="menuItemPrice" placeholder="Precio (tokens)" step="0.01" required>
-                        <button type="submit" class="btn-secondary">Agregar al menú</button>
-                    </form>
-                    <div id="myMenuItems"></div>
-                </div>
-            </section>
-
-            <!-- SECCIÓN: PEDIDOS -->
-            <section id="section-orders" class="app-section">
-                <div class="section-header">
-                    <h2>📦 Pedidos</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="orders-list" id="ordersList"></div>
-            </section>
-
-            <!-- SECCIÓN: TRABAJO REMOTO -->
-            <section id="section-remote" class="app-section">
-                <div class="section-header">
-                    <h2>💼 Trabajo Remoto</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="workers-grid" id="workersGrid"></div>
-                
-                <!-- Panel de trabajador -->
-                <div id="workerPanel" class="owner-panel hidden">
-                    <h3>⚙️ Mi Perfil de Trabajador</h3>
-                    <form onsubmit="saveWorkerProfile(event)" class="owner-form">
-                        <input type="text" id="workerSpecialty" placeholder="Especialidad" required>
-                        <input type="number" id="workerRate" placeholder="Tarifa por minuto (tokens)" step="0.1" required>
-                        <textarea id="workerBio" placeholder="Descripción de tus servicios"></textarea>
-                        <button type="submit" class="btn-primary">Guardar Perfil</button>
-                    </form>
-                </div>
-                
-                <!-- Videollamada -->
-                <div id="videoCallArea" class="hidden">
-                    <div class="call-info">
-                        <span id="callTimer">00:00</span>
-                        <span id="callCost">Costo: 0 tokens</span>
-                    </div>
-                    <div id="jitsiContainer" class="jitsi-container"></div>
-                    <button class="btn-danger" onclick="endCall()">📞 Terminar Llamada</button>
-                </div>
-            </section>
-
-            <!-- SECCIÓN: MARKETPLACE -->
-            <section id="section-marketplace" class="app-section">
-                <div class="section-header">
-                    <h2>🛒 Marketplace</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <button class="btn-primary" onclick="showSellForm()">+ Vender algo</button>
-                <form id="sellForm" class="owner-form hidden" onsubmit="publishItem(event)">
-                    <input type="text" id="itemTitle" placeholder="Título" required>
-                    <textarea id="itemDesc" placeholder="Descripción"></textarea>
-                    <input type="number" id="itemPrice" placeholder="Precio (tokens)" step="0.01" required>
-                    <button type="submit" class="btn-primary">Publicar</button>
-                </form>
-                <div class="marketplace-grid" id="marketplaceGrid"></div>
-            </section>
-
-            <!-- SECCIÓN: CHAT -->
-            <section id="section-chat" class="app-section">
-                <div class="section-header">
-                    <h2>💬 Chat</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="chat-container">
-                    <div class="chat-sidebar" id="chatList"></div>
-                    <div class="chat-main">
-                        <div class="chat-messages" id="chatMessages">
-                            <p class="empty-state">Selecciona una conversación</p>
-                        </div>
-                        <div class="chat-input">
-                            <input type="text" id="messageInput" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter')sendMessage()">
-                            <button class="btn-send" onclick="sendMessage()">➤</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- SECCIÓN: TOKENS -->
-            <section id="section-tokens" class="app-section">
-                <div class="section-header">
-                    <h2>◈ Mis Tokens</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="token-balance-card">
-                    <span class="balance-label">Saldo actual</span>
-                    <span class="balance-amount" id="tokenBalance">0</span>
-                    <span class="balance-usd">≈ $<span id="tokenUSD">0</span> USD</span>
-                </div>
-                <div class="token-actions">
-                    <button class="btn-primary" onclick="showRechargeModal()">+ Recargar Tokens</button>
-                </div>
-                <h3>Historial de transacciones</h3>
-                <div class="transactions-list" id="transactionsList"></div>
-            </section>
-
-            <!-- SECCIÓN: PERFIL -->
-            <section id="section-profile" class="app-section">
-                <div class="section-header">
-                    <h2>👤 Mi Perfil</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                <div class="profile-card">
-                    <div class="profile-avatar" id="profileAvatar">U</div>
-                    <h3 id="profileName">Usuario</h3>
-                    <p id="profileEmail">email@email.com</p>
-                    <span class="role-badge" id="profileRole">user</span>
-                    <div class="profile-stats">
-                        <div class="stat"><span id="statTokens">0</span><small>Tokens</small></div>
-                        <div class="stat"><span id="statVerified">No</span><small>Verificado</small></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- SECCIÓN: PANEL ADMIN -->
-            <section id="section-admin" class="app-section">
-                <div class="section-header">
-                    <h2>🛡️ Panel de Administración</h2>
-                    <button class="btn-back" onclick="showSection('dashboard')">← Volver</button>
-                </div>
-                
-                <div class="admin-tabs">
-                    <button class="admin-tab active" onclick="switchAdminTab('branding')">🎨 Branding</button>
-                    <button class="admin-tab" onclick="switchAdminTab('users')">👥 Usuarios</button>
-                    <button class="admin-tab" onclick="switchAdminTab('tokens')">◈ Tokens</button>
-                    <button class="admin-tab" onclick="switchAdminTab('content')">📋 Contenido</button>
-                </div>
-
-                <!-- Admin: Branding -->
-                <div id="admin-branding" class="admin-panel active">
-                    <h3>Logo de la Aplicación</h3>
-                    <div class="branding-preview">
-                        <img id="adminLogoPreview" src="" alt="Logo" style="display:none;max-width:150px;">
-                        <span id="adminLogoFallback" class="logo-hex large">⬡</span>
-                    </div>
-                    <div class="upload-area" onclick="document.getElementById('logoUpload').click()">
-                        <input type="file" id="logoUpload" accept="image/*" style="display:none" onchange="uploadLogo(event)">
-                        <p>📤 Clic para subir nuevo logo (PNG/JPG)</p>
-                    </div>
-                    <div class="branding-info">
-                        <p>El logo se actualiza en tiempo real en toda la plataforma</p>
-                    </div>
-                </div>
-
-                <!-- Admin: Usuarios -->
-                <div id="admin-users" class="admin-panel">
-                    <h3>Usuarios Registrados</h3>
-                    <div class="admin-table-container">
-                        <table class="admin-table">
-                            <thead>
-                                <tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Tokens</th><th>Estado</th><th>Acciones</th></tr>
-                            </thead>
-                            <tbody id="adminUsersTable"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Admin: Tokens -->
-                <div id="admin-tokens" class="admin-panel">
-                    <h3>Gestión de Tokens</h3>
-                    <div class="admin-token-form">
-                        <input type="email" id="adminTokenEmail" placeholder="Email del usuario">
-                        <input type="number" id="adminTokenAmount" placeholder="Cantidad">
-                        <button class="btn-primary" onclick="adminRechargeTokens()">Recargar</button>
-                    </div>
-                    <h3>Todas las transacciones</h3>
-                    <div id="adminTransactions"></div>
-                </div>
-
-                <!-- Admin: Contenido -->
-                <div id="admin-content" class="admin-panel">
-                    <h3>Contenido de la Plataforma</h3>
-                    <div class="admin-content-grid">
-                        <div class="content-card">
-                            <h4>🍽️ Restaurantes</h4>
-                            <div id="adminRestaurants"></div>
-                        </div>
-                        <div class="content-card">
-                            <h4>🎵 Discotecas</h4>
-                            <div id="adminNightclubs"></div>
-                        </div>
-                        <div class="content-card">
-                            <h4>🛵 Domiciliarios</h4>
-                            <div id="adminDrivers"></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-        </main>
-
-        <!-- Navegación inferior -->
-        <nav class="bottom-nav">
-            <button class="nav-item active" onclick="showSection('dashboard')">
-                <span class="nav-icon">🏠</span>
-                <span class="nav-label">Inicio</span>
-            </button>
-            <button class="nav-item" onclick="showSection('map')">
-                <span class="nav-icon">📍</span>
-                <span class="nav-label">Mapa</span>
-            </button>
-            <button class="nav-item" onclick="showSection('radar')">
-                <span class="nav-icon">🌙</span>
-                <span class="nav-label">Radar</span>
-            </button>
-            <button class="nav-item" onclick="showSection('chat')">
-                <span class="nav-icon">💬</span>
-                <span class="nav-label">Chat</span>
-            </button>
-            <button class="nav-item" onclick="showSection('tokens')">
-                <span class="nav-icon">◈</span>
-                <span class="nav-label">Tokens</span>
-            </button>
-        </nav>
-    </div>
-
-    <!-- MODAL: Recargar Tokens -->
-    <div id="modal-recharge" class="modal hidden">
-        <div class="modal-content">
-            <h3>◈ Recargar Tokens</h3>
-            <p>1 Token = $1 USD</p>
-            <div class="recharge-options">
-                <button onclick="processRecharge(5)">5 Tokens<br><small>$5</small></button>
-                <button onclick="processRecharge(10)">10 Tokens<br><small>$10</small></button>
-                <button onclick="processRecharge(25)">25 Tokens<br><small>$25</small></button>
-                <button onclick="processRecharge(50)">50 Tokens<br><small>$50</small></button>
-            </div>
-            <input type="number" id="customRecharge" placeholder="Cantidad personalizada" min="1">
-            <button class="btn-primary" onclick="processRecharge(document.getElementById('customRecharge').value)">Recargar</button>
-            <button class="btn-secondary" onclick="closeModal('modal-recharge')">Cancelar</button>
+        <div class="input-group">
+          <select id="regRole" onchange="showRoleFields()" required>
+            <option value="">¿Qué tipo de cuenta?</option>
+            <option value="user">👤 Usuario Normal</option>
+            <option value="restaurant">🍽️ Restaurante / Local</option>
+            <option value="delivery">🛵 Domiciliario</option>
+            <option value="nightclub">🎵 Bar / Discoteca</option>
+            <option value="remote_worker">💻 Trabajador Remoto</option>
+          </select>
         </div>
+        <div id="roleFields"></div>
+        <label class="check-line"><input type="checkbox" id="regTerms" required> Acepto términos y soy mayor de 18</label>
+        <button type="submit" class="btn-primary">Crear Cuenta</button>
+      </form>
+      <div id="authMessage" class="auth-message"></div>
     </div>
+  </div>
+</div>
 
-    <!-- TOAST -->
-    <div id="toast" class="toast hidden"></div>
+<!-- ========== PANTALLA APP ========== -->
+<div id="screen-app" class="screen">
+  <header class="app-header">
+    <div class="header-left">
+      <img id="headerLogo" alt="Logo" style="display:none;height:34px;border-radius:8px;">
+      <span id="headerLogoFallback" class="logo-hex small">⬡</span>
+      <h2 id="headerAppName">FENDYX</h2>
+    </div>
+    <div class="header-right">
+      <div class="token-badge" onclick="showSection('tokens')"><span>◈</span><span id="userTokens">0</span></div>
+      <div class="user-avatar" id="userAvatar" onclick="toggleUserMenu()">U</div>
+    </div>
+  </header>
+  <div id="userMenu" class="user-menu hidden">
+    <div class="menu-item" onclick="showSection('profile')">👤 Mi Perfil</div>
+    <div class="menu-item" onclick="showSection('tokens')">◈ Mis Tokens</div>
+    <div class="menu-item admin-only hidden" onclick="showSection('admin')">🛡️ Panel Admin</div>
+    <div class="menu-item logout" onclick="handleLogout()">🚪 Cerrar Sesión</div>
+  </div>
 
-    <!-- SCRIPTS -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://meet.jit.si/external_api.js"></script>
-    <script src="app.js"></script>
+  <main class="app-main">
+
+    <!-- DASHBOARD -->
+    <section id="section-dashboard" class="app-section active">
+      <div class="welcome-banner">
+        <h2>¡Hola, <span id="welcomeName">Usuario</span>! 👋</h2>
+        <p id="welcomeRole">Explora tu super-app</p>
+      </div>
+      <div class="modules-grid" id="modulesGrid"></div>
+    </section>
+
+    <!-- MAPA SOCIAL -->
+    <section id="section-map" class="app-section">
+      <div class="section-header"><h2>📍 Mapa Social</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div class="map-toolbar">
+        <button class="btn-primary half" id="btnShareLocation" onclick="toggleShareLocation()">📡 Compartir mi ubicación</button>
+        <button class="btn-secondary half" onclick="loadMapUsers()">🔄 Actualizar</button>
+      </div>
+      <div id="mapBox" class="map-box"></div>
+      <h3 class="sub-title">Personas compartiendo ubicación</h3>
+      <div id="nearbyList" class="chips-row"></div>
+    </section>
+
+    <!-- RADAR NOCTURNO -->
+    <section id="section-radar" class="app-section">
+      <div class="section-header"><h2>🌙 Radar Nocturno</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div class="radar-status">
+        <div class="radar-circle"><div class="radar-pulse"></div><span class="radar-icon">📡</span></div>
+        <p id="radarStatusText">Escaneando zona...</p>
+      </div>
+      <div class="radar-controls">
+        <label>Mi estado:</label>
+        <select id="radarStatusSelect" onchange="updateRadarStatus()">
+          <option value="single">💚 Soltero/a</option>
+          <option value="married">💍 Casado/a</option>
+          <option value="looking">👀 Buscando conocer</option>
+          <option value="unavailable">🚫 No disponible</option>
+        </select>
+      </div>
+      <div id="radarUsers" class="radar-users"></div>
+      <div id="nightclubOwnerPanel" class="owner-panel hidden">
+        <h3>🎵 Registrar mi Discoteca / Bar</h3>
+        <form class="owner-form" onsubmit="saveNightclub(event)">
+          <input type="text" id="clubName" placeholder="Nombre del lugar" required>
+          <input type="text" id="clubAddress" placeholder="Dirección" required>
+          <input type="number" id="clubRadius" placeholder="Radio de geocerca (metros)" value="300" min="20" required>
+          <button type="button" class="btn-secondary" onclick="setClubLocation()">📍 Usar mi ubicación actual</button>
+          <span id="clubCoords" class="hint-text">Sin ubicación asignada</span>
+          <button type="submit" class="btn-primary">Guardar Discoteca</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- RESTAURANTES -->
+    <section id="section-restaurants" class="app-section">
+      <div class="section-header"><h2>🍽️ Restaurantes</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div id="restaurantsList" class="cards-grid"></div>
+      <div id="restaurantOwnerPanel" class="owner-panel hidden">
+        <h3>🏪 Mi Restaurante</h3>
+        <form class="owner-form" onsubmit="saveRestaurant(event)">
+          <input type="text" id="restName" placeholder="Nombre del restaurante" required>
+          <input type="text" id="restAddress" placeholder="Dirección" required>
+          <textarea id="restDesc" placeholder="Descripción"></textarea>
+          <label class="check-line"><input type="checkbox" id="restOpen" checked> Abierto ahora</label>
+          <button type="submit" class="btn-primary">Guardar Restaurante</button>
+        </form>
+        <h3>🍕 Agregar plato al menú</h3>
+        <form class="owner-form" onsubmit="addMenuItem(event)">
+          <input type="text" id="menuItemName" placeholder="Nombre del plato" required>
+          <input type="number" id="menuItemPrice" placeholder="Precio en tokens" step="0.01" min="0.1" required>
+          <input type="text" id="menuItemDesc" placeholder="Descripción corta">
+          <button type="submit" class="btn-secondary">+ Agregar plato</button>
+        </form>
+        <div id="myMenuList" class="list-compact"></div>
+      </div>
+    </section>
+
+    <!-- PEDIDOS -->
+    <section id="section-orders" class="app-section">
+      <div class="section-header"><h2>📦 Pedidos</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div id="ownerOrdersWrap" class="hidden">
+        <h3 class="sub-title">Pedidos de mi restaurante</h3>
+        <div id="ownerOrdersList" class="list-compact"></div>
+      </div>
+      <div id="driverOrdersWrap" class="hidden">
+        <h3 class="sub-title">Pedidos disponibles para entregar</h3>
+        <div id="driverOrdersList" class="list-compact"></div>
+      </div>
+      <h3 class="sub-title">Mis pedidos</h3>
+      <div id="ordersList" class="list-compact"></div>
+    </section>
+
+    <!-- TRABAJO REMOTO -->
+    <section id="section-remote" class="app-section">
+      <div class="section-header"><h2>💼 Trabajo Remoto</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div id="workersGrid" class="cards-grid"></div>
+      <div id="workerPanel" class="owner-panel hidden">
+        <h3>⚙️ Mi perfil profesional</h3>
+        <form class="owner-form" onsubmit="saveWorkerProfile(event)">
+          <input type="text" id="workerSpecialty" placeholder="Especialidad" required>
+          <input type="number" id="workerRate" placeholder="Tarifa por minuto (tokens)" step="0.1" min="0.1" required>
+          <textarea id="workerBio" placeholder="Describe tus servicios"></textarea>
+          <label class="check-line"><input type="checkbox" id="workerOnline"> Disponible para llamadas</label>
+          <button type="submit" class="btn-primary">Guardar perfil</button>
+        </form>
+        <h3>📞 Llamadas dirigidas a mí</h3>
+        <div id="myCallsList" class="list-compact"></div>
+      </div>
+    </section>
+
+    <!-- MARKETPLACE -->
+    <section id="section-marketplace" class="app-section">
+      <div class="section-header"><h2>🛒 Marketplace</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <button class="btn-primary half" onclick="document.getElementById('sellForm').classList.toggle('hidden')">+ Vender algo</button>
+      <form id="sellForm" class="owner-form hidden" onsubmit="publishItem(event)">
+        <input type="text" id="itemTitle" placeholder="Título del producto" required>
+        <textarea id="itemDesc" placeholder="Descripción"></textarea>
+        <input type="number" id="itemPrice" placeholder="Precio en tokens" step="0.01" min="0.1" required>
+        <input type="file" id="itemImage" accept="image/*">
+        <button type="submit" class="btn-primary">Publicar</button>
+      </form>
+      <div id="marketplaceGrid" class="cards-grid"></div>
+      <h3 class="sub-title">Mis publicaciones</h3>
+      <div id="myListings" class="list-compact"></div>
+    </section>
+
+    <!-- CHAT -->
+    <section id="section-chat" class="app-section">
+      <div class="section-header"><h2>💬 Chat</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div class="chat-container">
+        <div class="chat-sidebar" id="chatList"></div>
+        <div class="chat-main">
+          <div class="chat-top" id="chatTitle">Selecciona una conversación</div>
+          <div class="chat-messages" id="chatMessages"><p class="empty-state">💬 Tus mensajes aparecerán aquí</p></div>
+          <div class="chat-input">
+            <input type="text" id="messageInput" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter')sendMessage()">
+            <button class="btn-send" onclick="sendMessage()">➤</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TOKENS -->
+    <section id="section-tokens" class="app-section">
+      <div class="section-header"><h2>◈ Mis Tokens</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div class="token-balance-card">
+        <span class="balance-label">Saldo disponible</span>
+        <span class="balance-amount" id="tokenBalance">0</span>
+        <span class="balance-usd">≈ $<span id="tokenUSD">0</span> USD</span>
+      </div>
+      <div class="row-buttons">
+        <button class="btn-primary half" onclick="openModal('modal-recharge')">+ Recargar</button>
+        <button class="btn-secondary half" onclick="document.getElementById('transferBox').classList.toggle('hidden')">⇄ Transferir</button>
+      </div>
+      <div id="transferBox" class="owner-panel hidden">
+        <input type="email" id="transferEmail" placeholder="Email del destinatario">
+        <input type="number" id="transferAmount" placeholder="Cantidad de tokens" min="0.1" step="0.1">
+        <button class="btn-primary" onclick="transferTokens()">Enviar tokens</button>
+      </div>
+      <h3 class="sub-title">Historial</h3>
+      <div id="transactionsList" class="list-compact"></div>
+    </section>
+
+    <!-- PERFIL -->
+    <section id="section-profile" class="app-section">
+      <div class="section-header"><h2>👤 Mi Perfil</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div class="profile-card">
+        <div class="profile-avatar" id="profileAvatar">U</div>
+        <img id="profileAvatarImg" alt="avatar" style="display:none;width:100px;height:100px;border-radius:50%;object-fit:cover;margin:0 auto 15px;">
+        <h3 id="profileName">Usuario</h3>
+        <p id="profileEmail" class="dim">email</p>
+        <span class="role-badge" id="profileRole">user</span>
+        <div class="profile-stats">
+          <div class="stat"><span id="statTokens">0</span><small>Tokens</small></div>
+          <div class="stat"><span id="statVerified">No</span><small>Verificado</small></div>
+          <div class="stat"><span id="statStatus">-</span><small>Estado</small></div>
+        </div>
+        <form class="owner-form" onsubmit="saveProfile(event)">
+          <input type="text" id="editName" placeholder="Nuevo nombre">
+          <select id="editStatus">
+            <option value="single">💚 Soltero/a</option>
+            <option value="married">💍 Casado/a</option>
+            <option value="looking">👀 Buscando conocer</option>
+            <option value="unavailable">🚫 No disponible</option>
+          </select>
+          <input type="file" id="editAvatar" accept="image/*">
+          <button type="submit" class="btn-primary">Guardar cambios</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- PANEL ADMIN -->
+    <section id="section-admin" class="app-section">
+      <div class="section-header"><h2>🛡️ Panel Admin</h2><button class="btn-back" onclick="showSection('dashboard')">← Volver</button></div>
+      <div class="admin-tabs">
+        <button class="admin-tab active" onclick="switchAdminTab('overview',this)">📊 Resumen</button>
+        <button class="admin-tab" onclick="switchAdminTab('branding',this)">🎨 Branding</button>
+        <button class="admin-tab" onclick="switchAdminTab('users',this)">👥 Usuarios</button>
+        <button class="admin-tab" onclick="switchAdminTab('tokens',this)">◈ Tokens</button>
+        <button class="admin-tab" onclick="switchAdminTab('content',this)">📋 Contenido</button>
+      </div>
+      <div id="admin-overview" class="admin-panel active">
+        <div class="stats-grid">
+          <div class="stat-card"><span id="kpiUsers">0</span><small>Usuarios</small></div>
+          <div class="stat-card"><span id="kpiTokens">0</span><small>Tokens en circulación</small></div>
+          <div class="stat-card"><span id="kpiOrders">0</span><small>Pedidos</small></div>
+          <div class="stat-card"><span id="kpiCalls">0</span><small>Videollamadas</small></div>
+        </div>
+        <h3 class="sub-title">Actividad reciente</h3>
+        <div id="activityFeed" class="list-compact"></div>
+      </div>
+      <div id="admin-branding" class="admin-panel">
+        <div class="branding-preview">
+          <img id="adminLogoPreview" alt="logo" style="display:none;max-width:160px;border-radius:14px;">
+          <span id="adminLogoFallback" class="logo-hex large">⬡</span>
+        </div>
+        <div class="upload-area" onclick="document.getElementById('logoUpload').click()">
+          <input type="file" id="logoUpload" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadLogo(event)">
+          <p>📤 Clic para subir nuevo logo (PNG/JPG/WebP)</p>
+        </div>
+        <div class="owner-form">
+          <input type="text" id="adminAppName" placeholder="Nombre de la app (ej: FENDYX)">
+          <button class="btn-primary" onclick="saveAppName()">Guardar nombre</button>
+        </div>
+        <p class="hint-text">El logo y el nombre se actualizan en tiempo real en toda la plataforma.</p>
+      </div>
+      <div id="admin-users" class="admin-panel">
+        <input type="text" id="adminUsersSearch" class="search-box" placeholder="🔍 Buscar por email o nombre..." oninput="loadAdminUsers()">
+        <div class="admin-table-container">
+          <table class="admin-table">
+            <thead><tr><th>Usuario</th><th>Rol</th><th>Tokens</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="adminUsersTable"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="admin-tokens" class="admin-panel">
+        <div class="admin-token-form">
+          <input type="email" id="adminTokenEmail" placeholder="Email del usuario">
+          <input type="number" id="adminTokenAmount" placeholder="Cantidad (+/-)">
+          <button class="btn-primary" onclick="adminAdjustTokens()">Aplicar</button>
+        </div>
+        <div id="adminTransactions" class="list-compact"></div>
+      </div>
+      <div id="admin-content" class="admin-panel">
+        <div class="admin-content-grid">
+          <div class="content-card"><h4>🍽️ Restaurantes</h4><div id="adminRestaurants"></div></div>
+          <div class="content-card"><h4>🎵 Discotecas</h4><div id="adminNightclubs"></div></div>
+          <div class="content-card"><h4>🛒 Marketplace</h4><div id="adminMarket"></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FAB CARRITO -->
+  <button id="cartFab" class="cart-fab hidden" onclick="openCart()">🛒<span id="cartCount" class="fab-badge">0</span></button>
+
+  <!-- NAV INFERIOR -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" onclick="showSection('dashboard')"><span class="nav-icon">🏠</span><span class="nav-label">Inicio</span></button>
+    <button class="nav-item" onclick="showSection('map')"><span class="nav-icon">📍</span><span class="nav-label">Mapa</span></button>
+    <button class="nav-item" onclick="showSection('radar')"><span class="nav-icon">🌙</span><span class="nav-label">Radar</span></button>
+    <button class="nav-item" onclick="showSection('chat')"><span class="nav-icon">💬</span><span class="nav-label">Chat</span></button>
+    <button class="nav-item" onclick="showSection('tokens')"><span class="nav-icon">◈</span><span class="nav-label">Tokens</span></button>
+  </nav>
+</div>
+
+<!-- ========== MODALES ========== -->
+<div id="modal-recharge" class="modal hidden">
+  <div class="modal-content">
+    <h3>◈ Recargar Tokens</h3>
+    <p class="dim">1 Token = $1 USD</p>
+    <div class="recharge-options">
+      <button onclick="processRecharge(5)">5<br><small>$5</small></button>
+      <button onclick="processRecharge(10)">10<br><small>$10</small></button>
+      <button onclick="processRecharge(25)">25<br><small>$25</small></button>
+      <button onclick="processRecharge(50)">50<br><small>$50</small></button>
+    </div>
+    <input type="number" id="customRecharge" placeholder="Cantidad personalizada" min="1">
+    <button class="btn-primary" onclick="processRecharge(document.getElementById('customRecharge').value)">Recargar ahora</button>
+    <button class="btn-secondary" onclick="closeModal('modal-recharge')">Cancelar</button>
+  </div>
+</div>
+
+<div id="modal-restaurant" class="modal hidden">
+  <div class="modal-content wide">
+    <div class="modal-head"><h3 id="restModalTitle">Menú</h3><button class="modal-close" onclick="closeModal('modal-restaurant')">✕</button></div>
+    <div id="restModalMenu" class="list-compact"></div>
+  </div>
+</div>
+
+<div id="modal-cart" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-head"><h3>🛒 Tu carrito</h3><button class="modal-close" onclick="closeModal('modal-cart')">✕</button></div>
+    <div id="cartItems" class="list-compact"></div>
+    <div class="cart-total">Total: <strong id="cartTotal">0</strong> tokens</div>
+    <input type="text" id="cartAddress" placeholder="Dirección de entrega" class="input-full">
+    <button class="btn-primary" onclick="checkout()">Confirmar pedido</button>
+  </div>
+</div>
+
+<div id="modal-profile" class="modal hidden">
+  <div class="modal-content">
+    <div class="profile-avatar" id="viewProfileAvatar">U</div>
+    <h3 id="viewProfileName">Usuario</h3>
+    <span class="role-badge" id="viewProfileRole">user</span>
+    <p id="viewProfileBio" class="dim"></p>
+    <button class="btn-primary" onclick="messageFromProfile()">💬 Enviar mensaje</button>
+    <button class="btn-secondary" onclick="closeModal('modal-profile')">Cerrar</button>
+  </div>
+</div>
+
+<div id="modal-call" class="modal hidden">
+  <div class="modal-content wide">
+    <div class="call-info"><span id="callTimer">00:00</span><span id="callCost">◈ 0.00</span></div>
+    <div id="jitsiContainer" class="jitsi-container"></div>
+    <button class="btn-danger full" onclick="endCall()">📞 Terminar llamada</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://meet.jit.si/external_api.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
